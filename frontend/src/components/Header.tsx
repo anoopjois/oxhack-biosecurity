@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Clock } from '../api/types'
 import { SHORTCUTS, SPEEDS } from '../lib/behaviour'
-import { longDate } from '../lib/format'
+import { lastDay, longDate } from '../lib/format'
+import { RISK_SCORE_HELP } from '../lib/status'
+import type { BaseMode } from './MapView'
 
 interface Props {
   clock: Clock | null
@@ -9,6 +11,9 @@ interface Props {
   confirmReset: boolean
   helpOpen: boolean
   speed: number
+  baseMode: BaseMode
+  showLog: boolean
+  spikeSlot: ReactNode
   onSpeed: (secondsPerDay: number) => void
   onPlay: () => void
   onPause: () => void
@@ -19,91 +24,118 @@ interface Props {
   onSpike: () => void
   onRunDemo: () => void
   onToggleHelp: () => void
+  onBaseMode: (mode: BaseMode) => void
+  onShowLog: (show: boolean) => void
 }
 
 export function Header(p: Props) {
   const { clock } = p
   const confirmButton = useRef<HTMLButtonElement>(null)
+  const [speedOpen, setSpeedOpen] = useState(false)
   useEffect(() => {
     if (p.confirmReset) confirmButton.current?.focus()
   }, [p.confirmReset])
 
   const atEnd = clock?.at_end ?? false
+  const playing = clock?.playing ?? false
+  const why = atEnd ? 'Timeline ended: reset to run again' : undefined
   return (
     <header className="header">
       <div className="brand">
-        <span className="brand-mark" aria-hidden>◉</span>
+        <span className="brand-dot" aria-hidden />
         <h1>Biosecurity Autobalancer</h1>
         <span className="badge-simulated" data-testid="simulated-badge">SIMULATED DATA</span>
       </div>
 
-      <div className="clock" data-testid="clock">
+      <div className="when" data-testid="clock">
         {clock ? (
           <>
-            <span className="clock-date">{longDate(clock.sim_date)}</span>
-            <span className="clock-day" data-testid="clock-day">Day {clock.day} / {lastDay(clock)}</span>
+            <strong className="when-date">{longDate(clock.sim_date)}</strong>
+            <span className="when-day" data-testid="clock-day">Day {clock.day} of {lastDay(clock)}</span>
           </>
-        ) : <span className="clock-date">Connecting…</span>}
+        ) : <strong className="when-date">Connecting…</strong>}
       </div>
 
       <div className="controls">
-        <div className="popover-anchor">
-          <button className="btn" onClick={p.onAskReset} disabled={!clock || p.busy}>↺ Reset</button>
-          {p.confirmReset && (
-            <div className="popover" role="dialog" aria-label="Confirm reset" data-testid="reset-confirm">
-              <p>Reset the simulation to day 27?</p>
-              <div className="popover-actions">
-                <button className="btn btn-danger" ref={confirmButton} onClick={p.onConfirmReset}>Reset</button>
-                <button className="btn" onClick={p.onCancelReset}>Cancel</button>
-              </div>
-            </div>
+        <div className="group" role="group" aria-label="Clock">
+          {playing ? (
+            <button onClick={p.onPause} data-testid="pause" title="Pause (Space)">❚❚ Pause</button>
+          ) : (
+            <button onClick={p.onPlay} disabled={!clock || atEnd || p.busy} data-testid="play"
+                    title={why ?? 'Play (Space)'}>▶ Play</button>
           )}
-        </div>
-        {clock?.playing ? (
-          <button className="btn btn-primary" onClick={p.onPause} data-testid="pause">❚❚ Pause</button>
-        ) : (
-          <button className="btn btn-primary" onClick={p.onPlay} disabled={!clock || atEnd || p.busy}
-                  data-testid="play">▶ Play</button>
-        )}
-        <button className="btn" onClick={p.onStep} disabled={!clock || atEnd || p.busy || clock.playing}
-                data-testid="step">⏭ Step</button>
-        <div className="segmented" role="group" aria-label="Seconds per simulated day">
-          {SPEEDS.map((s) => (
-            <button key={s} className={`seg${s === p.speed ? ' seg-on' : ''}`} aria-pressed={s === p.speed}
-                    onClick={() => p.onSpeed(s)} disabled={!clock || atEnd}>
-              {s}s
+          <button onClick={p.onStep} disabled={!clock || atEnd || p.busy || playing} data-testid="step"
+                  title={why ?? (playing ? 'Pause to step one day at a time' : 'Step one day (→)')}>⏭ Step</button>
+          <div className="popover-anchor">
+            <button onClick={() => setSpeedOpen((o) => !o)} disabled={!clock || atEnd} aria-haspopup="menu"
+                    aria-expanded={speedOpen} data-testid="speed" title={why ?? 'Seconds per simulated day'}>
+              {p.speed}s / day ▾
             </button>
-          ))}
-          <span className="seg-caption">per day</span>
+            {speedOpen && (
+              <div className="popover menu" role="menu" aria-label="Speed">
+                {SPEEDS.map((s) => (
+                  <button key={s} role="menuitemradio" aria-checked={s === p.speed} className={s === p.speed ? 'on' : ''}
+                          onClick={() => { p.onSpeed(s); setSpeedOpen(false) }} data-testid={`speed-${s}`}>
+                    {s} s per day
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="popover-anchor">
+            <button onClick={p.onAskReset} disabled={!clock || p.busy} aria-label="Reset" title="Reset (R)"
+                    data-testid="reset">↺</button>
+            {p.confirmReset && (
+              <div className="popover popover-right" role="dialog" aria-label="Confirm reset" data-testid="reset-confirm">
+                <p>Reset the simulation to day 27?</p>
+                <div className="popover-actions">
+                  <button className="btn btn-primary" ref={confirmButton} onClick={p.onConfirmReset}>Reset</button>
+                  <button className="btn" onClick={p.onCancelReset}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        <button className="btn btn-demo" onClick={p.onRunDemo} disabled={!clock || p.busy} data-testid="run-demo">
+
+        <div className="popover-anchor">
+          <button className="btn" onClick={p.onSpike} disabled={!clock || atEnd} data-testid="spike"
+                  title={why ?? 'Inject a simulated outbreak (S)'}>⚠ Simulate spike</button>
+          {p.spikeSlot}
+        </div>
+        <button className="btn btn-primary" onClick={p.onRunDemo} disabled={!clock || p.busy} data-testid="run-demo">
           ★ Run demo
         </button>
-        <button className="btn btn-spike" onClick={p.onSpike} disabled={!clock || atEnd} data-testid="spike">
-          ⚠ Simulate Pathogen Spike
-        </button>
         <div className="popover-anchor">
-          <button className="btn btn-help" onClick={p.onToggleHelp} aria-label="Keyboard shortcuts"
+          <button className="btn btn-ghost btn-icon" onClick={p.onToggleHelp} aria-label="Help and settings"
                   aria-expanded={p.helpOpen} data-testid="help">?</button>
           {p.helpOpen && (
-            <div className="popover popover-right" role="dialog" aria-label="Keyboard shortcuts" data-testid="help-popover">
+            <div className="popover popover-right help" role="dialog" aria-label="Help and settings" data-testid="help-popover">
               <h3>Keyboard shortcuts</h3>
               <dl className="shortcuts">
                 {SHORTCUTS.map((s) => (
                   <div key={s.keys}><dt><kbd>{s.keys}</kbd></dt><dd>{s.label}</dd></div>
                 ))}
               </dl>
-              <p className="muted">Shortcuts are off while typing in a field.</p>
+              <h3>Map style</h3>
+              <div className="choice" role="radiogroup" aria-label="Map style">
+                {([['vector', 'Clean (built-in, works offline)'], ['tiles', 'Street map (online, greyscale)']] as const).map(([m, label]) => (
+                  <label key={m}>
+                    <input type="radio" name="basemap" checked={p.baseMode === m} onChange={() => p.onBaseMode(m)}
+                           data-testid={`map-${m}`} /> {label}
+                  </label>
+                ))}
+              </div>
+              <h3>Events</h3>
+              <label className="choice">
+                <span><input type="checkbox" checked={p.showLog} onChange={(e) => p.onShowLog(e.target.checked)}
+                             data-testid="show-log" /> Show the raw event log instead of incident cards</span>
+              </label>
+              <h3>About the risk score</h3>
+              <p className="muted">{RISK_SCORE_HELP}</p>
             </div>
           )}
         </div>
       </div>
     </header>
   )
-}
-
-/** The last day index (41), derived from the clock's date range. */
-function lastDay(clock: Clock): number {
-  const ms = Date.parse(clock.last_date) - Date.parse(clock.first_date)
-  return Math.round(ms / 86_400_000)
 }

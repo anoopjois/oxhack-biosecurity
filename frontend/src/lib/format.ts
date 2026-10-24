@@ -22,12 +22,16 @@ export function daysBetween(fromIso: string, toIso: string): number {
   return Math.round((parseIso(toIso).getTime() - parseIso(fromIso).getTime()) / 86_400_000)
 }
 
+/** The last day index of the run (41), from the clock's date range. */
+export const lastDay = (clock: { first_date: string; last_date: string }) => daysBetween(clock.first_date, clock.last_date)
+
 /** 61588 -> "61,588" */
 export const int = (n: number) => Math.round(n).toLocaleString('en-GB')
 
-/** 24300 -> "24.3k", 950 -> "950" */
+/** 116000 -> "116k", 24300 -> "24k", 4300 -> "4.3k", 950 -> "950" */
 export function compact(n: number): string {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (Math.abs(n) >= 10_000) return `${Math.round(n / 1_000)}k`
   if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}k`
   return String(Math.round(n))
 }

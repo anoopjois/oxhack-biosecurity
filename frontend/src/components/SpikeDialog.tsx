@@ -45,13 +45,14 @@ export function SpikeDialog({ zones, selected, onSelect, onInject, onClose }: Pr
   }
 
   return (
-    <div className="spike-dialog" role="dialog" aria-label="Simulate pathogen spike" data-testid="spike-dialog"
+    <div className="spike-dialog popover popover-right" role="dialog" aria-label="Simulate pathogen spike" data-testid="spike-dialog"
          onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <h2>⚠ Simulate pathogen spike</h2>
+      <h2>Simulate a pathogen spike</h2>
+      <p className="hint">A hidden outbreak the system has to discover on its own.</p>
       <label className="field">
-        <span>Zone</span>
+        <span>Area</span>
         <select ref={select} value={selected} onChange={(e) => onSelect(e.target.value)} data-testid="spike-zone">
-          <option value="" disabled>Choose a zone…</option>
+          <option value="" disabled>Choose an area…</option>
           {byRegion.map(([region, list]) => (
             <optgroup key={region} label={region}>
               {list.map((z) => <option key={z.zip_code} value={z.zip_code}>{z.zone_name}</option>)}
@@ -59,7 +60,7 @@ export function SpikeDialog({ zones, selected, onSelect, onInject, onClose }: Pr
           ))}
         </select>
       </label>
-      <p className="hint">…or click a zone on the map.</p>
+      <p className="hint">…or click an area on the map.</p>
       <label className="field">
         <span>Growth rate r = <strong data-testid="spike-r">{r.toFixed(2)}</strong> per day</span>
         <input type="range" min={R_MIN} max={R_MAX} step={0.05} value={r}
@@ -68,7 +69,7 @@ export function SpikeDialog({ zones, selected, onSelect, onInject, onClose }: Pr
       <p className="hint" data-testid="spike-doubling">Viral load doubles every {doublingDays(r).toFixed(1)} days</p>
       {error && <p className="error" role="alert" data-testid="spike-error">{error}</p>}
       <div className="dialog-actions">
-        <button className="btn btn-spike" onClick={inject} disabled={!selected || sending} data-testid="spike-inject">
+        <button className="btn btn-primary" onClick={inject} disabled={!selected || sending} data-testid="spike-inject">
           Inject spike
         </button>
         <button className="btn" onClick={onClose}>Cancel</button>

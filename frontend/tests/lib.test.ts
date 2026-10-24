@@ -4,26 +4,29 @@ import { leadMarkers, pollInterval, shortcutFor, shouldUseOffline } from '../src
 import { buildFeed, isDefaultVisible, latestAllocation } from '../src/lib/events'
 import { compact, doublingDays, longDate, shortDate, shortName } from '../src/lib/format'
 import { arcPoints, arrowRotation } from '../src/lib/geo'
-import { inventoryBars } from '../src/lib/inventory'
-import { countByStatus, pinRadius, PIN_MIN_RADIUS, PIN_RADIUS_RANGE, STATUS_META } from '../src/lib/status'
-import { allocation, briefing, event } from './fixtures'
+import { countByStatus, PIN_DOT_RADIUS, PIN_RING_RADIUS, PIN_SELECTED_RADIUS, RISK_SCORE_HELP, STATUS_META } from '../src/lib/status'
+import { briefing, event } from './fixtures'
 
 describe('status and pins', () => {
   it('maps every status to a colour and a text label', () => {
     expect(STATUS_META.CRITICAL).toMatchObject({ label: 'Critical', color: '#d03b3b' })
-    expect(STATUS_META.ELEVATED.ink).toBe('#1a1a1a') // dark text on amber for contrast
+    expect(STATUS_META.ELEVATED.ink).toBe('#2b1d00') // dark text on amber for contrast
+    expect(STATUS_META.SAFE.label).toBe('Normal')      // plain language for a lay audience
     expect(countByStatus(['SAFE', 'SAFE', 'CRITICAL'])).toEqual({ CRITICAL: 1, ELEVATED: 0, SAFE: 2, INSUFFICIENT_DATA: 0 })
   })
 
-  it('sizes pins by sqrt(population): monotonic and bounded', () => {
-    const max = 3_100_000
-    const radii = [0, 510_000, 1_000_000, 2_900_000, max, 9e9].map((p) => pinRadius(p, max))
-    expect(radii[0]).toBe(PIN_MIN_RADIUS)
-    expect(radii[4]).toBe(PIN_MIN_RADIUS + PIN_RADIUS_RANGE)
-    expect(radii[5]).toBe(radii[4])
-    for (let i = 1; i < radii.length; i++) expect(radii[i]).toBeGreaterThanOrEqual(radii[i - 1])
-    // area ∝ population: a quarter of the population gives half the extra radius
-    expect(pinRadius(max / 4, max) - PIN_MIN_RADIUS).toBeCloseTo(PIN_RADIUS_RANGE / 2)
+  it('keeps pins small and the same size: dot inside ring inside selection ring', () => {
+    expect(PIN_DOT_RADIUS * 2).toBeGreaterThanOrEqual(6)
+    expect(PIN_DOT_RADIUS * 2).toBeLessThanOrEqual(8)
+    expect(PIN_RING_RADIUS * 2).toBeGreaterThanOrEqual(14)
+    expect(PIN_RING_RADIUS * 2).toBeLessThanOrEqual(18)
+    expect(PIN_SELECTED_RADIUS).toBeGreaterThan(PIN_RING_RADIUS)
+  })
+
+  it('explains the risk score in two plain sentences', () => {
+    expect(RISK_SCORE_HELP.split(/(?<=\.) /)).toHaveLength(2)
+    expect(RISK_SCORE_HELP).toMatch(/0–100/)
+    expect(RISK_SCORE_HELP).toMatch(/sewage water.*A&E.*crowded/)
   })
 })
 
@@ -102,20 +105,6 @@ describe('event feed', () => {
   })
 })
 
-describe('inventory bars', () => {
-  it('puts the target first and reconstructs donor "before" as after + quantity', () => {
-    const bars = inventoryBars(allocation, 'Greater Manchester')
-    expect(bars.ppe_units.map((b) => b.role)).toEqual(['target', 'donor', 'donor'])
-    expect(bars.ppe_units[0]).toMatchObject({ hub: 'Greater Manchester', before: 74900, after: 116000 })
-    expect(bars.ppe_units[1]).toMatchObject({ hub: 'Cheshire', before: 32400 + 24300, after: 32400 })
-    // conservation within the chart: what donors lost equals what the target gained
-    for (const item of ['ppe_units', 'antiviral_doses', 'vaccine_doses'] as const) {
-      const lost = bars[item].filter((b) => b.role === 'donor').reduce((s, b) => s + b.before - b.after, 0)
-      expect(lost).toBe(bars[item][0].after - bars[item][0].before)
-    }
-  })
-})
-
 describe('behaviour', () => {
   it('polls faster while playing', () => {
     expect(pollInterval(true)).toBe(1000)
@@ -157,7 +146,9 @@ describe('formatting', () => {
   it('formats dates, numbers and names for the projector', () => {
     expect(longDate('2026-10-02')).toBe('Fri 2 Oct 2026')
     expect(shortDate('2026-09-28')).toBe('28 Sep')
-    expect(compact(24300)).toBe('24.3k')
+    expect(compact(24300)).toBe('24k')
+    expect(compact(116000)).toBe('116k')
+    expect(compact(4300)).toBe('4.3k')
     expect(compact(950)).toBe('950')
     expect(doublingDays(0.4)).toBeCloseTo(1.733, 3)
     expect(shortName('Bath and North East Somerset, Swindon and Wiltshire')).toBe('Bath')

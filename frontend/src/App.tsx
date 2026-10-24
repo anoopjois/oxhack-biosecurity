@@ -1,22 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeatureCollection } from 'geojson'
 import type { AllocationPayload } from './api/types'
-import { EventFeed } from './components/EventFeed'
 import { Header } from './components/Header'
-import { InventoryPanel } from './components/InventoryPanel'
+import { Incidents } from './components/Incidents'
 import { MapView, type ArcSet, type BaseMode } from './components/MapView'
+import { RawLog } from './components/RawLog'
+import { CRITICAL_LINE } from './components/ScoreChart'
 import { SpikeDialog } from './components/SpikeDialog'
+import { Timeline } from './components/Timeline'
 import { ZonePanel } from './components/ZonePanel'
-import { shortcutFor } from './lib/behaviour'
-import { latestAllocation } from './lib/events'
+import { leadMarkers, shortcutFor } from './lib/behaviour'
+import { injectionDate } from './lib/events'
+import { shortDate } from './lib/format'
+import { buildIncidents, focusZip } from './lib/incidents'
 import { DEMO_ZONE, useSimulation } from './state/useSimulation'
+import { useZoneHistory } from './state/useZoneHistory'
 
 export const ARC_LIFETIME_MS = 20_000
+const START_DAY = 27
 
 export default function App() {
   const sim = useSimulation()
   const clock = sim.status?.clock ?? null
-  const zones = sim.status?.zones ?? []
+  const zones = useMemo(() => sim.status?.zones ?? [], [sim.status])
 
   const [selected, setSelected] = useState<string | null>(null)
   const [spikeOpen, setSpikeOpen] = useState(false)
@@ -27,9 +33,11 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [arcs, setArcs] = useState<ArcSet | null>(null)
-  const [mode, setMode] = useState<BaseMode>('online')
+  const [mode, setMode] = useState<BaseMode>('vector')
   const [fellBack, setFellBack] = useState(false)
   const [outline, setOutline] = useState<FeatureCollection | null>(null)
+  const [showLog, setShowLog] = useState(false)
+  const [coachDismissed, setCoachDismissed] = useState(false)
 
   useEffect(() => {
     fetch('/england.geojson').then((r) => r.json()).then(setOutline).catch(() => undefined)
@@ -46,17 +54,27 @@ export default function App() {
     return () => window.clearTimeout(t)
   }, [arcs])
   useEffect(() => setArcs(null), [clock?.run])
-
   useEffect(() => {
     if (!notice) return
     const t = window.setTimeout(() => setNotice(null), 4000)
     return () => window.clearTimeout(t)
   }, [notice])
 
-  const speed = clock?.playing ? clock.seconds_per_day : speedPref
+  // The timeline follows the selected area if it has an incident, otherwise the newest incident.
+  const incidents = useMemo(() => buildIncidents(sim.events), [sim.events])
+  const focus = selected && incidents.some((i) => i.zip === selected) ? selected : focusZip(incidents) ?? null
+  const day = clock?.day ?? null
+  const run = clock?.run ?? null
+  const selectedHistory = useZoneHistory(selected, day, run)
+  const focusHistory = useZoneHistory(focus, day, run)
+  const focusMarks = leadMarkers((focusHistory?.days ?? []).filter((d) => d.score !== null), CRITICAL_LINE)
 
-  const run = useCallback(async (fn: () => Promise<void>) => {
+  const speed = clock?.playing ? clock.seconds_per_day : speedPref
+  const showCoach = !coachDismissed && !!clock && clock.day === START_DAY && sim.events.length === 0
+
+  const act = useCallback(async (fn: () => Promise<void>) => {
     setBusy(true)
+    setCoachDismissed(true)
     try {
       await fn()
     } catch (err) {
@@ -66,28 +84,29 @@ export default function App() {
     }
   }, [])
 
-  const play = useCallback(() => run(() => sim.play(speedPref)), [run, sim, speedPref])
-  const pause = useCallback(() => run(sim.pause), [run, sim])
-  const step = useCallback(() => run(sim.step), [run, sim])
+  const play = useCallback(() => act(() => sim.play(speedPref)), [act, sim, speedPref])
+  const pause = useCallback(() => act(sim.pause), [act, sim])
+  const step = useCallback(() => act(sim.step), [act, sim])
   const doReset = useCallback(() => {
     setConfirmReset(false)
     setSelected(null)
-    return run(sim.reset)
-  }, [run, sim])
+    return act(sim.reset)
+  }, [act, sim])
   const runDemo = useCallback(() => {
     setConfirmReset(false)
     setSpikeOpen(false)
     setSelected(DEMO_ZONE)
-    return run(sim.runDemo)
-  }, [run, sim])
+    return act(sim.runDemo)
+  }, [act, sim])
   const onSpeed = useCallback((s: number) => {
     setSpeedPref(s)
-    if (clock?.playing) run(() => sim.play(s))
-  }, [clock?.playing, run, sim])
+    if (clock?.playing) act(() => sim.play(s))
+  }, [clock?.playing, act, sim])
   const openSpike = useCallback(() => {
     if (!clock || clock.at_end) return
     setSpikeZone(selected ?? '')
     setSpikeOpen(true)
+    setHelpOpen(false)
   }, [clock, selected])
 
   // Keyboard shortcuts (never while typing in a form control).
@@ -124,40 +143,60 @@ export default function App() {
   }, [clock, play, pause, step, openSpike])
 
   const onZoneClick = (zip: string) => (spikeOpen ? setSpikeZone(zip) : setSelected(zip))
+  const spikeSlot = spikeOpen ? (
+    <SpikeDialog zones={zones} selected={spikeZone} onSelect={setSpikeZone}
+                 onInject={(zip, r) => act(async () => { await sim.trigger(zip, r); setSelected(zip) })}
+                 onClose={() => setSpikeOpen(false)} />
+  ) : null
 
   return (
     <div className="app">
       <Header clock={clock} busy={busy} confirmReset={confirmReset} helpOpen={helpOpen} speed={speed}
+              baseMode={mode} showLog={showLog} spikeSlot={spikeSlot}
               onSpeed={onSpeed} onPlay={play} onPause={pause} onStep={step}
               onAskReset={() => setConfirmReset(true)} onConfirmReset={doReset}
               onCancelReset={() => setConfirmReset(false)} onSpike={openSpike} onRunDemo={runDemo}
-              onToggleHelp={() => setHelpOpen((h) => !h)} />
-      {!sim.connected && <div className="banner banner-error" role="alert">Backend unreachable: retrying…</div>}
-      {notice && <div className="banner" role="status" data-testid="notice">{notice}</div>}
-      <main className="grid">
+              onToggleHelp={() => { setHelpOpen((h) => !h); setSpikeOpen(false) }}
+              onBaseMode={(m) => { setMode(m); setFellBack(false) }} onShowLog={setShowLog} />
+      <main className="main">
         <div className="cell-map">
           <MapView zones={zones} selected={selected} picking={spikeOpen} arcs={arcs} outline={outline}
                    mode={mode} fellBack={fellBack}
-                   onMode={(m) => { setMode(m); setFellBack(false) }}
-                   onFallBack={() => { setMode('offline'); setFellBack(true) }}
+                   onFallBack={() => { setMode('vector'); setFellBack(true) }}
                    onZoneClick={onZoneClick} />
+          {showCoach && (
+            <div className="coach" role="dialog" aria-label="Getting started" data-testid="coach">
+              <h2>Watch an outbreak unfold</h2>
+              <p>Press <b>★ Run demo</b>: a simulated pathogen spike hits Greater Manchester. Watch the system
+                spot it in wastewater, forecast the surge two days early, and move medical stock before hospitals fill up.</p>
+              <div className="coach-actions">
+                <button className="btn btn-primary" onClick={runDemo}>★ Run demo</button>
+                <button className="btn btn-ghost" onClick={() => setCoachDismissed(true)} data-testid="coach-dismiss">
+                  Explore on my own</button>
+              </div>
+            </div>
+          )}
+          {clock?.at_end && (
+            <div className="ended" role="status" data-testid="end-banner">
+              Timeline ended on {shortDate(clock.sim_date)}.
+              <button className="btn" onClick={doReset}>↺ Reset</button>
+              <button className="btn btn-primary" onClick={runDemo} data-testid="replay-demo">★ Replay demo</button>
+            </div>
+          )}
+          {!sim.connected && <div className="toast toast-error" role="alert">Backend unreachable: retrying…</div>}
+          {notice && <div className="toast" role="status" data-testid="notice">{notice}</div>}
         </div>
         <div className="cell-side">
-          {/* Over the side column, so the whole map stays clickable while choosing a zone. */}
-          {spikeOpen && (
-            <SpikeDialog zones={zones} selected={spikeZone} onSelect={setSpikeZone}
-                         onInject={async (zip, r) => { await sim.trigger(zip, r); setSelected(zip) }}
-                         onClose={() => setSpikeOpen(false)} />
-          )}
-          <ZonePanel zones={zones} selected={selected} day={clock?.day ?? null} run={clock?.run ?? null}
-                     events={sim.events} onSelect={setSelected} />
-          <EventFeed events={sim.events}
-                     onShowArcs={(payload) => setArcs({ key: Date.now(), allocations: [payload] })} />
-        </div>
-        <div className="cell-bottom">
-          <InventoryPanel allocation={latestAllocation(sim.events)} zones={zones} />
+          <ZonePanel zones={zones} selected={selected} history={selectedHistory}
+                     spikeDate={selected ? injectionDate(sim.events, selected) : undefined} onSelect={setSelected} />
+          {showLog
+            ? <RawLog events={sim.events} />
+            : <Incidents events={sim.events} zones={zones} onSelect={setSelected}
+                         onShowArcs={(payload) => setArcs({ key: Date.now(), allocations: [payload] })} />}
         </div>
       </main>
+      <Timeline clock={clock} spike={focus ? injectionDate(sim.events, focus) : undefined}
+                alert={focusMarks.alert} hit={focusMarks.cross} />
     </div>
   )
 }

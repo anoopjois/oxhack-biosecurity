@@ -286,98 +286,85 @@ Code lives in `backend/agent/`: `allocation.py` (pure maths), `executor.py`,
 - **Bottom:** an inventory bar chart comparing before and after.
 - **Zone popup:** score, projected score and doubling time.
 
-### Frontend design (Phase 4)
-**Theme and layout**
-- One light, high-contrast theme for projectors: base text 18px, system fonts.
-- Status colours come from the dataviz skill's fixed palette and always carry a text
-  label.
-- Grid: map (~62% wide), side column (zone panel above the feed), inventory strip below.
+### Frontend design (Phase 4, redesigned)
+**Look**
+- Calm, judge-friendly UI.
+- One blue accent (`#2a78d6`) for interface elements. Red only ever means CRITICAL;
+  amber means ELEVATED; muted sage means SAFE, labelled "Normal".
+- Spacing 4/8/12/16/24. Fluid base type 14–18px.
+- Header (64px) and timeline (64px) have fixed heights, so the map sits on whole
+  pixels.
 
-**Data**
-- `useSimulation` polls `map-status` and `events` (incrementally, by `since_id`):
-  every 1 s while playing, every 3 s while paused, and immediately after every action.
-- `inventory` is refetched when a new `AGENT_ALLOCATION` arrives.
-- All caches are cleared when `clock.run` changes, i.e. on a reset.
+**Layout**
+- Header: brand, SIMULATED DATA badge, date + "Day N of 41", and controls:
+  - a quiet group: play/pause, step, speed menu, reset;
+  - "⚠ Simulate spike" (opens a popover; a click on the map picks the area);
+  - **★ Run demo**, the only primary button;
+  - "?": help & settings, holding shortcuts, map style, the raw log toggle and the
+    risk-score explanation.
+- Map (left).
+- Side column: zone card above incident cards.
+- Timeline bar along the bottom.
 
 **Map**
-- Pins: radius `7 + 14·√(pop/max)`. CRITICAL pins have a pulsing halo.
-- On a new allocation the camera flies to the target and donors. Arcs are quadratic
-  Béziers, labelled at the donor end facing away from the target. After 20 s the map flies
-  back to England.
-- Offline fallback: if tiles fail (3 errors before the first tile, or none within 4 s),
-  the map switches to `public/england.geojson`. That file is built by
-  `scripts/build_outline.py` from Natural Earth (public domain).
+- Default basemap: built-in vector (Natural Earth outline plus a few city names that
+  avoid pins). It is seam-free, fits England tightly, works offline, and `maxBounds`
+  stops panning away.
+- Optional greyscale OSM tiles at **integer zoom only**. Fractional zoom makes browsers
+  scale each tile separately and leaves hairline seams; this was measured in Chromium
+  and WebKit.
+- If tiles fail, the map falls back to the vector basemap with an "Offline" chip.
+- Pins: a 7px dot inside a 16px ring, all the same size.
+  - Colour comes from CSS via `data-status`, so state changes ease over 600 ms.
+  - CRITICAL adds an outward pulse; selected areas get a dark outer ring.
+- Labels: pinned only for CRITICAL and selected areas (as markers, on whichever side
+  covers fewer pins); every other area shows its name on hover.
+- On a new allocation the camera flies to the target and donors, and arcs are labelled
+  at the donor end. After 20 s the map flies back.
 
-**Feed and panels**
-- Default feed: injections, transitions to CRITICAL, `AGENT_*`, `RIDESHARE_WEBHOOK` and
-  `TIMELINE_END`. Ordered newest day first, chronological within a day.
-- One briefing card per episode; the AI version replaces the rule-based one in place.
-- Inventory below 1500px viewport width: a before → after table instead of charts.
+**Zone card**
+- Stats: Risk now, Risk in 48h, Doubling, A&E wait (with "usual"), each with a "?"
+  tooltip.
+- Custom SVG chart: Risk now (solid black) vs "Forecast, 48 hours ahead" (dashed
+  blue), with Spike and Alert pills, a shaded lead band and a hover readout.
+- A prominent lead caption.
+- With nothing selected: an England overview.
+
+**Incident cards** (`lib/incidents.ts`)
+- One card per outbreak, routed by zone and then by episode id, so simultaneous
+  outbreaks never interleave.
+- Steps: Simulated spike (greyed and dashed, "hidden from the system") → Detected →
+  Stock moved (the inventory summary, details expandable) → Briefing (the AI version
+  replaces the rule-based one in place) → Containment.
+
+**Timeline**
+- Days 0–41 as a track, with recorded history shaded and a "Today" cursor.
+- Markers: Spike, Alert raised, Would have hit 80.
 
 **Controls**
+- First-load coach card ("Watch an outbreak unfold").
+- End-of-timeline bar ("Timeline ended · Reset · Replay demo"); disabled controls
+  explain why in a tooltip.
 - **Run demo:** reset, inject Greater Manchester at r = 0.4, play at 1 s/day.
-- **Shortcuts:** Space, →, R (confirm), S, ?. They never fire while typing in a form
-  control.
+- Shortcuts Space, →, R, S, ?, which never fire while typing.
+
+**Data**
+- `useSimulation` polls `map-status` and events by `since_id`: every 1 s while
+  playing, 3 s while paused, and right after every action.
+- `clock.run` changes clear all caches.
+- The first events fetch of a run is a baseline, so a reload never replays old
+  allocations.
 
 **Backend additions**
-- `GET /api/v1/zones/{zip}/history`.
-- `er_baseline` (the baseline actually used, frozen while CRITICAL).
-- `clock.run`.
-- `PRAGMA user_version` schema check; a mismatch rebuilds the per-run tables.
+- `GET /api/v1/zones/{zip}/history`, `er_baseline`, `clock.run`.
+- A `PRAGMA user_version` schema check.
 
 **Verification**
-- `cd frontend && npm test`: vitest, pure logic plus components.
-- `npx playwright test`: e2e at 1920×1080 and 1280×720, writing screenshots to `$SHOTS`.
-- `docs/DEMO_CHECKLIST.md`: the manual walkthrough.
-
-## Build phases
-
-Phases 0–5 are approved. Each phase still follows the loop
-propose → approve → build → test → commit.
-
-0. Scaffold: layout, `dev.sh`, `.env.example`, `zones.csv`, `engine/config.py`.
-1. Engine: generator, preprocessing, scoring, forecast, status replay, and the 4
-   required tests.
-2. Backend core: SQLite, seeding, simulation clock, `map-status`,
-   `trigger-outbreak`, clock routes.
-3. Agent: allocation, LLM with validated JSON, template fallback, executor,
-   rideshare mock, `events` and `inventory`.
-4. Frontend: map, header and clock, spike modal, event feed, inventory chart, popups.
-5. Demo polish: end-to-end rehearsal, `docs/MATHS.md`, README.
-
-### Optional phases
-
-These run only after the demo works end to end. **The demo must never depend on
-either one.** The default config always uses the hand-set `combine()` and needs no
-network access.
-
-**6. ML calibration (optional)**
-- Fit a logistic regression on simulated outbreaks.
-- Features: `z_W`, `z_E`, `M`, `r_hat` and `r_hat / se_r`.
-- Label: "the outbreak crosses severity within 48h".
-  - Severity comes from **ground truth**: the true ER excess passing a config
-    threshold.
-  - It never comes from the hand-set score, or the model would just learn to copy
-    `combine()`.
-- Implementation: plain numpy.
-  - Logistic regression is fitted by IRLS (Newton's method).
-  - The AUC is the Mann–Whitney statistic.
-  - No scikit-learn.
-- Split train and test **by seed**, so the same simulated world never appears on
-  both sides.
-- Report the AUC and the ROC curve.
-- Choose the alert threshold from a false-alarm budget, i.e. the largest threshold
-  whose false-positive rate on clean zones stays within budget.
-- A config flag switches between the hand-set `combine()` and the fitted model. The
-  hand-set version is the default.
-
-**7. Real-data validation (optional, time-boxed)**
-- Use public US wastewater surveillance data and hospital admissions data to
-  estimate the real lead time from wastewater to hospital load. This is evidence
-  for the lag assumption `L = 4`.
-- This is a standalone analysis. It is never imported by `backend/`, and the raw
-  data is gitignored.
-- **Time-boxed.** If data access is painful, drop the phase.
+- `cd frontend && npm test` (vitest).
+- `npx playwright test`: 6 projects (Chromium and WebKit × 1280×720, 1440×900,
+  1920×1080), with screenshots written to `$SHOTS`.
+- `docs/DEMO_CHECKLIST.md`.
+- Key screenshots are in `docs/figures/ui-*.png`.
 
 ## Overrides of docs/SPEC.md
 

@@ -37,6 +37,9 @@ export function useSimulation(): Simulation {
 
   const lastEventId = useRef(0)
   const run = useRef<number | null>(null)
+  // The first events fetch of a run (page load, or right after a reset) is a baseline: events
+  // that already happened must not replay their arcs and camera flight.
+  const baseline = useRef(true)
   const inFlight = useRef(false)
   const playing = useRef(false)
 
@@ -51,6 +54,7 @@ export function useSimulation(): Simulation {
         // A reset (or first load): drop everything cached from the previous run.
         run.current = next.clock.run
         lastEventId.current = 0
+        baseline.current = true
         setEvents([])
         setNewAllocations([])
         await refreshInventory()
@@ -63,10 +67,11 @@ export function useSimulation(): Simulation {
         setEvents((old) => [...old, ...fresh.events])
         const allocations = fresh.events.filter((e) => e.type === 'AGENT_ALLOCATION')
         if (allocations.length > 0) {
-          setNewAllocations(allocations)
+          if (!baseline.current) setNewAllocations(allocations)
           await refreshInventory()
         }
       }
+      baseline.current = false
       setConnected(true)
     } catch (err) {
       if (!(err instanceof ApiError)) setConnected(false)

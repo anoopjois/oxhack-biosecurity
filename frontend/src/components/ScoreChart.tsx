@@ -1,0 +1,108 @@
+import { useEffect, useRef, useState } from 'react'
+import type { HistoryDay } from '../api/types'
+import { shortDate } from '../lib/format'
+import { SERIES } from '../lib/status'
+
+export const CRITICAL_LINE = 80
+const PAD = { left: 30, right: 10, top: 24, bottom: 20 }
+
+interface Props {
+  days: HistoryDay[]        // scored days only
+  spike?: string
+  alert?: string
+  hit?: string
+}
+
+/** Risk now (solid) vs the forecast 48 hours ahead (dashed), with spike/alert markers and the lead band. */
+export function ScoreChart({ days, spike, alert, hit }: Props) {
+  const box = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ w: 480, h: 160 })
+  const [hover, setHover] = useState<number | null>(null)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0) setSize({ w: width, h: height })
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const { w, h } = size
+  const n = days.length
+  const X = (i: number) => PAD.left + (n > 1 ? (i * (w - PAD.left - PAD.right)) / (n - 1) : 0)
+  const Y = (v: number) => PAD.top + ((100 - v) * (h - PAD.top - PAD.bottom)) / 100
+  const at = (date?: string) => (date ? days.findIndex((d) => d.date === date) : -1)
+  const path = (key: 'score' | 'projected_score') =>
+    days.map((d, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(d[key] ?? 0).toFixed(1)}`).join('')
+  const [iSpike, iAlert, iHit] = [at(spike), at(alert), at(hit)]
+  const ticks = n > 1 ? Array.from({ length: 5 }, (_, k) => Math.round((k * (n - 1)) / 4)) : []
+
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const i = Math.round(((x - PAD.left) / (w - PAD.left - PAD.right)) * (n - 1))
+    setHover(i >= 0 && i < n ? i : null)
+  }
+
+  return (
+    <div className="score-chart" ref={box} data-testid="score-chart">
+      {n < 2 ? <p className="muted chart-empty">Not enough data yet.</p> : (
+        <svg width={w} height={h} role="img" onMouseMove={onMove} onMouseLeave={() => setHover(null)}
+             aria-label="Risk now and the 48-hour forecast over time">
+          {[0, 40].map((v) => (
+            <g key={v}>
+              <line x1={PAD.left} x2={w - PAD.right} y1={Y(v)} y2={Y(v)} stroke="#ecede8" />
+              <text x={PAD.left - 6} y={Y(v) + 4} className="axis" textAnchor="end">{v}</text>
+            </g>
+          ))}
+          {iAlert >= 0 && iHit > iAlert && (
+            <rect x={X(iAlert)} y={PAD.top} width={X(iHit) - X(iAlert)} height={h - PAD.top - PAD.bottom}
+                  fill="#d03b3b" opacity={0.09} data-testid="lead-band" />
+          )}
+          <line x1={PAD.left} x2={w - PAD.right} y1={Y(CRITICAL_LINE)} y2={Y(CRITICAL_LINE)} stroke="#d03b3b" strokeDasharray="5 4" />
+          <text x={PAD.left - 6} y={Y(CRITICAL_LINE) + 4} className="axis axis-critical" textAnchor="end">80</text>
+          <text x={PAD.left + 4} y={Y(CRITICAL_LINE) - 5} className="axis axis-critical">Critical</text>
+          {iSpike >= 0 && <Marker x={X(iSpike)} top={PAD.top} bottom={h - PAD.bottom} label="Spike" kind="spike" maxX={w} />}
+          {iAlert >= 0 && <Marker x={X(iAlert)} top={PAD.top} bottom={h - PAD.bottom} label="Alert" kind="alert" maxX={w} />}
+          <path d={path('projected_score')} fill="none" stroke={SERIES.forecast} strokeWidth={2.5} strokeDasharray="6 4" />
+          <path d={path('score')} fill="none" stroke={SERIES.current} strokeWidth={2.5} />
+          {iHit >= 0 && <circle cx={X(iHit)} cy={Y(days[iHit].score ?? 0)} r={5} fill="#fff" stroke="#d03b3b" strokeWidth={2.5} />}
+          {ticks.map((i) => (
+            <text key={i} x={X(i)} y={h - 4} className="axis" textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>
+              {shortDate(days[i].date)}
+            </text>
+          ))}
+          {hover !== null && (
+            <g pointerEvents="none">
+              <line x1={X(hover)} x2={X(hover)} y1={PAD.top} y2={h - PAD.bottom} stroke="#9ca3af" />
+              <circle cx={X(hover)} cy={Y(days[hover].score ?? 0)} r={4} fill={SERIES.current} />
+              <circle cx={X(hover)} cy={Y(days[hover].projected_score ?? 0)} r={4} fill={SERIES.forecast} />
+              <foreignObject x={Math.min(X(hover) + 8, w - 168)} y={PAD.top} width={160} height={58}>
+                <div className="chart-tip">
+                  <strong>{shortDate(days[hover].date)}</strong>
+                  <span>Risk now {Math.round(days[hover].score ?? 0)}</span>
+                  <span>Forecast {Math.round(days[hover].projected_score ?? 0)}</span>
+                </div>
+              </foreignObject>
+            </g>
+          )}
+        </svg>
+      )}
+    </div>
+  )
+}
+
+function Marker({ x, top, bottom, label, kind, maxX }: { x: number; top: number; bottom: number; label: string; kind: 'spike' | 'alert'; maxX: number }) {
+  const color = kind === 'alert' ? '#d03b3b' : '#4b5563'
+  const width = label.length * 7 + 14
+  const pillX = Math.min(Math.max(x, width / 2 + 2), maxX - width / 2 - 2)
+  return (
+    <g data-testid={`chart-${kind}`}>
+      <line x1={x} x2={x} y1={top} y2={bottom} stroke={color} strokeWidth={1.5} strokeDasharray={kind === 'spike' ? '3 3' : undefined} />
+      <rect x={pillX - width / 2} y={2} width={width} height={18} rx={9} fill={color} />
+      <text x={pillX} y={15} className="marker-label" textAnchor="middle">{label}</text>
+    </g>
+  )
+}
