@@ -10,6 +10,7 @@ __pycache__/
 
 # Runtime data
 *.sqlite3
+*.sqlite3-*
 *.db
 data/raw/
 

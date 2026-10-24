@@ -155,6 +155,34 @@ The backend owns the clock.
 - Controls are play, pause, step and speed. Each tick advances one simulated day and
   rescores everything as of that day.
 - The clock **auto-pauses** at the last pre-generated day.
+- **Outbreaks.** A second outbreak in a zone that already has one returns **409**.
+  Different zones can have outbreaks at the same time.
+
+### Backend design (Phase 2)
+- **Where data lives.**
+  - The full timeline, including the future, lives only in memory, in
+    `backend/simulation.py`.
+  - Each tick *ingests* one more day of telemetry into SQLite.
+  - The engine scores from SQLite, so the DB never contains future rows.
+- **Thread safety.**
+  - One `threading.Lock` guards all simulation state.
+  - Each mutation and its SQLite writes happen in one transaction.
+  - Readers get a snapshot that is rebuilt after every mutation.
+  - The clock is an asyncio task that runs `step()` through `asyncio.to_thread`.
+- **Invariant I1: the past on screen never changes.**
+  - An injected outbreak starts at the current day, where its multiplier is 1, so
+    only later days change.
+  - Ingested telemetry is never rewritten.
+- **Invariant I2: reproducibility.**
+  - State is a function of the seed plus the ordered `actions` log: reset, step
+    and trigger. Clock ticks are logged as steps.
+  - `apply_actions` replays the log. Wall-clock timestamps are excluded from
+    comparisons.
+- **Transitions.**
+  - Every status change becomes a `STATUS_CHANGE` event, written in the tick's
+    transaction.
+  - Listeners registered with `add_transition_listener` receive the transitions
+    after the commit, outside the lock.
 - `POST /api/v1/clock/reset` regenerates the data and restores the starting state.
 - **Simulate Pathogen Spike** takes a zone and r. It injects an outbreak into the
   future rows, starting from the current day.
@@ -168,11 +196,12 @@ The agent runs when a zone **transitions** to CRITICAL.
    - Stock targets scale with population.
    - `deficit = surge target − stock`.
    - Each donor keeps a per-capita safety level.
-1. **Deterministic allocation.**
+1. **Deterministic allocation** runs **inside the tick**, which keeps it reproducible.
    - Donors are SAFE zones, ranked by distance.
    - Each donor transfers `min(deficit, donor stock above its safety level)` for each
      of PPE, antivirals and vaccines.
-2. **LLM.**
+2. **LLM.** It runs **asynchronously** and never blocks the clock. Its text is not
+   reproducible, and it never affects quantities.
    - The provider is Claude, called through `ANTHROPIC_API_KEY`. The model name lives
      in backend config.
    - It receives the context and the already-computed transfers.
