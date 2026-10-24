@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS zone_status (
     r_hat           REAL,
     se_r            REAL,
     doubling_days   REAL,
+    er_baseline     REAL,
     baseline_frozen INTEGER NOT NULL
 );
 
@@ -114,8 +115,21 @@ def connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
+# Bump when the schema changes. Every table holds state a reset regenerates (zones is reloaded
+# from zones.csv at startup), so on a mismatch we simply drop and recreate everything.
+SCHEMA_VERSION = 2
+ALL_TABLES = ["transfers", "agent_episodes", "zone_status", "telemetry_logs", "hospital_inventories",
+              "events", "actions", "zones"]
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
+    if conn.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        for table in ALL_TABLES:
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
+        conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
 def clear_for_reset(conn: sqlite3.Connection) -> None:

@@ -130,7 +130,10 @@ def test_reset_restores_initial_state(client, tmp_path):
     with TestClient(create_app(Settings(db_path=tmp_path / "fresh.sqlite3", seed=42),
                                 directive_writer=None)) as fresh:
         for path in ("map-status", "events", "inventory"):
-            assert client.get(f"{API}/{path}").json() == fresh.get(f"{API}/{path}").json(), path
+            mine, theirs = client.get(f"{API}/{path}").json(), fresh.get(f"{API}/{path}").json()
+            if path == "map-status":  # `run` counts resets in this session; it is not simulated state
+                assert mine["clock"].pop("run") == theirs["clock"].pop("run") + 1
+            assert mine == theirs, path
 
     # Reset with a new seed changes the world.
     client.post(f"{API}/clock/reset", json={"seed": 7})
@@ -154,3 +157,27 @@ def test_events_filtering(client):
     injected = client.get(f"{API}/events?types=OUTBREAK_INJECTED").json()["events"]
     assert [e["zip_code"] for e in injected] == [OUTBREAK_ZONE]
     assert client.get(f"{API}/events?since_id={ids[-1]}").json() == {"events": [], "last_id": ids[-1]}
+
+
+def test_zone_history_endpoint(client):
+    client.post(f"{API}/trigger-outbreak", json={"zone": OUTBREAK_ZONE, "r": 0.4})
+    for _ in range(6):
+        client.post(f"{API}/clock/step")
+    history = client.get(f"{API}/zones/{OUTBREAK_ZONE}/history").json()
+    days = history["days"]
+    assert history["zone_name"] == "Greater Manchester"
+    assert [d["day"] for d in days] == list(range(START_DAY + 7))   # day 0 .. current day only
+    assert days[0]["status"] == "INSUFFICIENT_DATA" and days[0]["score"] is None
+    current = {z["zip_code"]: z for z in client.get(f"{API}/map-status").json()["zones"]}[OUTBREAK_ZONE]
+    assert days[-1]["status"] == current["status"]
+    assert np.isclose(days[-1]["score"], current["score"])
+    assert np.isclose(days[-1]["projected_score"], current["projected_score"])
+    assert client.get(f"{API}/zones/atlantis/history").status_code == 404
+
+
+def test_clock_run_and_er_baseline(client):
+    status = client.get(f"{API}/map-status").json()
+    run = status["clock"]["run"]
+    assert all(z["er_baseline"] is not None and z["er_baseline"] > 0 for z in status["zones"])
+    client.post(f"{API}/clock/reset")
+    assert client.get(f"{API}/map-status").json()["clock"]["run"] == run + 1

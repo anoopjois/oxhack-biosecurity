@@ -15,7 +15,7 @@ from backend import config, db
 from backend.clock import run_clock
 from backend.schemas import (
     ClockResponse, EventsResponse, InventoryResponse, MapStatus, PlayRequest, ResetRequest,
-    StepResponse, TriggerRequest, TriggerResponse,
+    StepResponse, TriggerRequest, TriggerResponse, ZoneHistory,
 )
 from backend.simulation import DEFAULT_WRITER, Simulation, SimulationError
 from engine.zones import load_zones
@@ -55,6 +55,10 @@ def create_app(settings: config.Settings | None = None, directive_writer=DEFAULT
     @app.get(f"{P}/map-status", response_model=MapStatus)
     async def map_status(request: Request):
         return sim(request).map_status()
+
+    @app.get(f"{P}/zones/{{zip_code}}/history", response_model=ZoneHistory)
+    async def zone_history(request: Request, zip_code: str):
+        return await asyncio.to_thread(sim(request).zone_history, zip_code)
 
     @app.get(f"{P}/events", response_model=EventsResponse)
     async def events(request: Request,

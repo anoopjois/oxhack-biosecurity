@@ -43,6 +43,7 @@ class DayResult:
     r_hat: float | None = None
     se_r: float | None = None
     doubling_days: float | None = None
+    er_baseline: float | None = None  # mu_E actually used today (the frozen one while CRITICAL)
     baseline_frozen: bool = False
 
 
@@ -93,7 +94,7 @@ def replay_zone(ww: np.ndarray, er: np.ndarray, mobility: np.ndarray,
         results.append(DayResult(
             day=t, date=dates[t], status=status, score=cur.score, projected_score=proj,
             z_W=cur.z_W, z_E=cur.z_E, r_hat=fit.r_hat, se_r=fit.se_r,
-            doubling_days=fit.doubling_days, baseline_frozen=frozen is not None,
+            doubling_days=fit.doubling_days, er_baseline=b.mu_E, baseline_frozen=frozen is not None,
         ))
     return results
 

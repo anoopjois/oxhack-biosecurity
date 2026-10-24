@@ -41,7 +41,11 @@ def test_reproducible_from_seed_and_actions(make_sim):
 
     replayed = make_sim(seed=999, name="replayed")  # starts elsewhere; the log's reset fixes the seed
     replayed.apply_actions(log)
-    assert replayed.map_status() == original.map_status()
+    def state(sim):  # `run` counts resets in a session; it is not simulated state
+        status = sim.map_status()
+        return {**status, "clock": {k: v for k, v in status["clock"].items() if k != "run"}}
+
+    assert state(replayed) == state(original)
     assert events_without_wall_clock(replayed) == events_without_wall_clock(original)
     assert replayed.actions_log() == log
     conn_a, conn_b = original.read_connection(), replayed.read_connection()
@@ -53,3 +57,25 @@ def test_reproducible_from_seed_and_actions(make_sim):
 
     other_seed = make_sim(seed=7, name="other")
     assert other_seed.map_status()["zones"] != original.map_status()["zones"]
+
+
+def test_schema_version_mismatch_rebuilds(tmp_path):
+    """An old local DB (different schema version) is rebuilt instead of crashing."""
+    import sqlite3
+
+    from backend.config import Settings
+    from backend.db import SCHEMA_VERSION
+    from backend.simulation import Simulation
+
+    path = tmp_path / "old.sqlite3"
+    old = sqlite3.connect(path)
+    old.execute("CREATE TABLE zone_status (zip_code TEXT PRIMARY KEY, status TEXT)")  # old shape
+    old.execute("PRAGMA user_version = 1")
+    old.commit()
+    old.close()
+    sim = Simulation(Settings(db_path=path), directive_writer=None)
+    try:
+        assert sim.conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        assert all(z["er_baseline"] is not None for z in sim.map_status()["zones"])
+    finally:
+        sim.close()

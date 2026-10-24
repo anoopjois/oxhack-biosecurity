@@ -12,6 +12,7 @@ class Clock(BaseModel):
     seconds_per_day: float
     at_end: bool
     seed: int
+    run: int
 
 
 class Telemetry(BaseModel):
@@ -35,6 +36,7 @@ class ZoneStatus(BaseModel):
     r_hat: float | None
     se_r: float | None
     doubling_days: float | None
+    er_baseline: float | None
     baseline_frozen: bool
     telemetry: Telemetry
 
@@ -42,6 +44,20 @@ class ZoneStatus(BaseModel):
 class MapStatus(BaseModel):
     clock: Clock
     zones: list[ZoneStatus]
+
+
+class HistoryDay(BaseModel):
+    day: int
+    date: str
+    status: str
+    score: float | None
+    projected_score: float | None
+
+
+class ZoneHistory(BaseModel):
+    zip_code: str
+    zone_name: str
+    days: list[HistoryDay]
 
 
 class Event(BaseModel):

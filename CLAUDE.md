@@ -276,6 +276,7 @@ Code lives in `backend/agent/`: `allocation.py` (pure maths), `executor.py`,
 - `POST /api/v1/trigger-outbreak` with body `{zone, r}`
 - `POST /api/v1/clock/play`, `/api/v1/clock/pause`, `/api/v1/clock/step`,
   `/api/v1/clock/reset`
+- `GET  /api/v1/zones/{zip_code}/history`
 
 ## Frontend
 
@@ -284,6 +285,50 @@ Code lives in `backend/agent/`: `allocation.py` (pure maths), `executor.py`,
 - **Side panel:** the live event feed and agent directives.
 - **Bottom:** an inventory bar chart comparing before and after.
 - **Zone popup:** score, projected score and doubling time.
+
+### Frontend design (Phase 4)
+**Theme and layout**
+- One light, high-contrast theme for projectors: base text 18px, system fonts.
+- Status colours come from the dataviz skill's fixed palette and always carry a text
+  label.
+- Grid: map (~62% wide), side column (zone panel above the feed), inventory strip below.
+
+**Data**
+- `useSimulation` polls `map-status` and `events` (incrementally, by `since_id`):
+  every 1 s while playing, every 3 s while paused, and immediately after every action.
+- `inventory` is refetched when a new `AGENT_ALLOCATION` arrives.
+- All caches are cleared when `clock.run` changes, i.e. on a reset.
+
+**Map**
+- Pins: radius `7 + 14·√(pop/max)`. CRITICAL pins have a pulsing halo.
+- On a new allocation the camera flies to the target and donors. Arcs are quadratic
+  Béziers, labelled at the donor end facing away from the target. After 20 s the map flies
+  back to England.
+- Offline fallback: if tiles fail (3 errors before the first tile, or none within 4 s),
+  the map switches to `public/england.geojson`. That file is built by
+  `scripts/build_outline.py` from Natural Earth (public domain).
+
+**Feed and panels**
+- Default feed: injections, transitions to CRITICAL, `AGENT_*`, `RIDESHARE_WEBHOOK` and
+  `TIMELINE_END`. Ordered newest day first, chronological within a day.
+- One briefing card per episode; the AI version replaces the rule-based one in place.
+- Inventory below 1500px viewport width: a before → after table instead of charts.
+
+**Controls**
+- **Run demo:** reset, inject Greater Manchester at r = 0.4, play at 1 s/day.
+- **Shortcuts:** Space, →, R (confirm), S, ?. They never fire while typing in a form
+  control.
+
+**Backend additions**
+- `GET /api/v1/zones/{zip}/history`.
+- `er_baseline` (the baseline actually used, frozen while CRITICAL).
+- `clock.run`.
+- `PRAGMA user_version` schema check; a mismatch rebuilds the per-run tables.
+
+**Verification**
+- `cd frontend && npm test`: vitest, pure logic plus components.
+- `npx playwright test`: e2e at 1920×1080 and 1280×720, writing screenshots to `$SHOTS`.
+- `docs/DEMO_CHECKLIST.md`: the manual walkthrough.
 
 ## Build phases
 

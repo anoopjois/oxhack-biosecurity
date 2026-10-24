@@ -33,7 +33,7 @@ from backend.agent.rideshare import MockRideshare, RideshareClient
 from backend.inventory import seed_inventory
 from engine.generator import SyntheticData, generate, inject_outbreak
 from engine.preprocess import VALUE_COLUMNS, to_daily
-from engine.status import Status, score_zones
+from engine.status import Status, replay_zone, score_zones
 from engine.zones import load_zones
 
 
@@ -76,7 +76,7 @@ DEFAULT_WRITER = object()  # sentinel: build a Claude writer from config (None i
 
 SEVERITY_BY_NEW_STATUS = {Status.CRITICAL.value: "critical", Status.ELEVATED.value: "warning"}
 ZONE_RESULT_FIELDS = ["status", "score", "projected_score", "z_W", "z_E", "r_hat", "se_r",
-                      "doubling_days", "baseline_frozen"]
+                      "doubling_days", "er_baseline", "baseline_frozen"]
 
 
 def _clean(value):
@@ -149,6 +149,7 @@ class Simulation:
             "seconds_per_day": self.seconds_per_day,
             "at_end": self.at_end,
             "seed": self.seed,
+            "run": self.generation,  # changes on every reset; the frontend clears its caches
         }
 
     def add_transition_listener(self, listener: TransitionListener) -> None:
@@ -225,6 +226,24 @@ class Simulation:
     def get_clock(self) -> dict:
         with self.lock:
             return self.clock()
+
+    def zone_history(self, zip_code: str) -> dict:
+        """Day-by-day status, score and projected score for one zone, up to the current day."""
+        with self.lock:
+            if zip_code not in self.zone_names:
+                raise NotFound(f"unknown zone: {zip_code}")
+            tele = pd.read_sql(
+                f"SELECT zip_code, timestamp AS date, {', '.join(VALUE_COLUMNS)} "
+                "FROM telemetry_logs WHERE zip_code = ?", self.conn, params=(zip_code,))
+        daily = to_daily(tele)  # the DB never holds days after the current one
+        results = replay_zone(daily["wastewater_copies_per_l"].to_numpy(dtype=float),
+                              daily["er_avg_wait_mins"].to_numpy(dtype=float),
+                              daily["mobility_density_score"].to_numpy(dtype=float),
+                              list(pd.to_datetime(daily["date"])))
+        return {"zip_code": zip_code, "zone_name": self.zone_names[zip_code],
+                "days": [{"day": r.day, "date": r.date.strftime("%Y-%m-%d"), "status": r.status.value,
+                          "score": _clean(r.score), "projected_score": _clean(r.projected_score)}
+                         for r in results]}
 
     def read_connection(self):
         """A fresh connection for read-only queries (WAL: never sees a half-written tick)."""
