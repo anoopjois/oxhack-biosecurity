@@ -17,18 +17,19 @@ from backend.schemas import (
     ClockResponse, EventsResponse, InventoryResponse, MapStatus, PlayRequest, ResetRequest,
     StepResponse, TriggerRequest, TriggerResponse,
 )
-from backend.simulation import Simulation, SimulationError
+from backend.simulation import DEFAULT_WRITER, Simulation, SimulationError
 from engine.zones import load_zones
 
 P = config.API_PREFIX
 
 
-def create_app(settings: config.Settings | None = None) -> FastAPI:
+def create_app(settings: config.Settings | None = None, directive_writer=DEFAULT_WRITER) -> FastAPI:
+    """directive_writer: the LLM briefing writer (default: Claude if a key is set; None = rule-based only)."""
     settings = settings or config.Settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        sim = Simulation(settings)
+        sim = Simulation(settings, directive_writer=directive_writer)
         control = asyncio.Event()
         app.state.sim, app.state.control = sim, control
         task = asyncio.create_task(run_clock(sim, control))

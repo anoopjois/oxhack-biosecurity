@@ -59,11 +59,38 @@ CREATE TABLE IF NOT EXISTS events (
     event_id   INTEGER PRIMARY KEY AUTOINCREMENT,
     sim_date   TEXT NOT NULL,
     created_at TEXT NOT NULL,                        -- wall clock; excluded from reproducibility
-    type       TEXT NOT NULL,                        -- STATUS_CHANGE | OUTBREAK_INJECTED | TIMELINE_END
+    type       TEXT NOT NULL,                        -- STATUS_CHANGE | OUTBREAK_INJECTED | TIMELINE_END |
+                                                     -- AGENT_ALLOCATION | AGENT_DIRECTIVE | RIDESHARE_WEBHOOK
     severity   TEXT NOT NULL,                        -- info | warning | critical
     zip_code   TEXT REFERENCES zones,
     message    TEXT NOT NULL,
     payload    TEXT NOT NULL                         -- JSON
+);
+
+CREATE TABLE IF NOT EXISTS agent_episodes (
+    episode_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    zip_code         TEXT NOT NULL REFERENCES zones,
+    status_event_id  INTEGER NOT NULL UNIQUE REFERENCES events,  -- exactly once per CRITICAL episode
+    opened_date      TEXT NOT NULL,
+    closed_date      TEXT,
+    context          TEXT NOT NULL,                  -- JSON given to the template and the LLM
+    llm_status       TEXT NOT NULL,                  -- not_configured | pending | done | refused | failed:* | rejected:*
+    directive_source TEXT NOT NULL                   -- template | llm
+);
+
+CREATE TABLE IF NOT EXISTS transfers (
+    transfer_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    episode_id            INTEGER NOT NULL REFERENCES agent_episodes,
+    sim_date              TEXT NOT NULL,
+    donor_zip             TEXT NOT NULL REFERENCES zones,
+    target_zip            TEXT NOT NULL REFERENCES zones,
+    distance_km           REAL NOT NULL,
+    ppe_units             INTEGER NOT NULL,
+    antiviral_doses       INTEGER NOT NULL,
+    vaccine_doses         INTEGER NOT NULL,
+    donor_ppe_after       INTEGER NOT NULL,
+    donor_antiviral_after INTEGER NOT NULL,
+    donor_vaccine_after   INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS actions (
@@ -75,7 +102,8 @@ CREATE TABLE IF NOT EXISTS actions (
 """
 
 # Tables emptied on reset (zones is static). Order respects foreign keys.
-RESET_TABLES = ["telemetry_logs", "zone_status", "hospital_inventories", "events", "actions"]
+RESET_TABLES = ["telemetry_logs", "zone_status", "transfers", "agent_episodes",
+                "hospital_inventories", "events", "actions"]
 
 
 def connect(path: Path) -> sqlite3.Connection:

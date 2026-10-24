@@ -127,7 +127,8 @@ def test_reset_restores_initial_state(client, tmp_path):
         client.post(f"{API}/clock/step")
     assert client.post(f"{API}/clock/reset").json()["clock"]["day"] == START_DAY
 
-    with TestClient(create_app(Settings(db_path=tmp_path / "fresh.sqlite3", seed=42))) as fresh:
+    with TestClient(create_app(Settings(db_path=tmp_path / "fresh.sqlite3", seed=42),
+                                directive_writer=None)) as fresh:
         for path in ("map-status", "events", "inventory"):
             assert client.get(f"{API}/{path}").json() == fresh.get(f"{API}/{path}").json(), path
 

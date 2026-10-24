@@ -27,6 +27,9 @@ import numpy as np
 import pandas as pd
 
 from backend import config, db
+from backend.agent.executor import Agent
+from backend.agent.llm import DirectiveWriter, LLMOutcome, make_writer
+from backend.agent.rideshare import MockRideshare, RideshareClient
 from backend.inventory import seed_inventory
 from engine.generator import SyntheticData, generate, inject_outbreak
 from engine.preprocess import VALUE_COLUMNS, to_daily
@@ -69,6 +72,8 @@ class StepResult:
 
 TransitionListener = Callable[[list[Transition]], None]
 
+DEFAULT_WRITER = object()  # sentinel: build a Claude writer from config (None if no API key)
+
 SEVERITY_BY_NEW_STATUS = {Status.CRITICAL.value: "critical", Status.ELEVATED.value: "warning"}
 ZONE_RESULT_FIELDS = ["status", "score", "projected_score", "z_W", "z_E", "r_hat", "se_r",
                       "doubling_days", "baseline_frozen"]
@@ -88,8 +93,11 @@ def _now() -> str:
 
 
 class Simulation:
-    def __init__(self, settings: config.Settings):
+    def __init__(self, settings: config.Settings, directive_writer=DEFAULT_WRITER,
+                 rideshare: RideshareClient | None = None):
         self.settings = settings
+        self.generation = 0   # bumped on reset; late LLM results from an older run are discarded
+        self._closed = False
         self.lock = threading.Lock()
         self._listeners: list[TransitionListener] = []
         self.zones = load_zones()
@@ -100,6 +108,8 @@ class Simulation:
         self.playing = False
         self.seconds_per_day = settings.seconds_per_day
         self.seed = settings.seed
+        writer: DirectiveWriter | None = make_writer() if directive_writer is DEFAULT_WRITER else directive_writer
+        self.agent = Agent(self.zones, rideshare or MockRideshare(), writer, self.attach_llm_result)
 
         self.conn = db.connect(settings.db_path)
         db.init_schema(self.conn)
@@ -113,6 +123,9 @@ class Simulation:
         self.reset(settings.seed)
 
     def close(self) -> None:
+        with self.lock:
+            self._closed = True
+        self.agent.shutdown()
         self.conn.close()
 
     # ------------------------------------------------------------------ helpers
@@ -224,6 +237,7 @@ class Simulation:
             seed = self.seed if seed is None else seed
             data = generate(self.zones["zip_code"].tolist(), self.n_days,
                             self.settings.start_date, seed)
+            self.generation += 1
             with self.conn:
                 db.clear_for_reset(self.conn)
                 self.data, self.seed, self.current_day, self.playing = data, seed, self.start_day, False
@@ -259,6 +273,8 @@ class Simulation:
                              "se_r": new["se_r"], "doubling_days": new["doubling_days"]})
                         transitions.append(Transition(zip_code, old_status, new["status"], day,
                                                       event["event_id"], new))
+                # The agent's deterministic part: allocation, transfers, events (same transaction).
+                jobs = self.agent.handle_transitions(self, day, transitions, results)
                 self._write_statuses(day, results)
                 if day >= self.last_day:
                     self._add_event(day, "TIMELINE_END", "info", None,
@@ -270,10 +286,33 @@ class Simulation:
                 self.playing = False
             self._build_snapshot()
             clock = self.clock()
+            generation = self.generation
+        self.agent.submit(jobs, generation)  # LLM briefings run in the background
         for listener in self._listeners:
             listener(transitions)
         return StepResult(clock=clock, tick_ms=(time.perf_counter() - t0) * 1000,
                           transitions=transitions)
+
+    def attach_llm_result(self, episode_id: int, generation: int, outcome: LLMOutcome) -> None:
+        """Called from an LLM worker thread: attach the AI briefing to its episode, if still current."""
+        with self.lock:
+            if self._closed or generation != self.generation:
+                return  # a reset (or shutdown) happened since this job was queued
+            row = self.conn.execute("SELECT zip_code FROM agent_episodes WHERE episode_id = ?",
+                                    (episode_id,)).fetchone()
+            if row is None:
+                return
+            with self.conn:
+                if outcome.status == "done":
+                    message, payload = self.agent.llm_event(episode_id, row["zip_code"], outcome)
+                    self._add_event(self.current_day, "AGENT_DIRECTIVE", "warning", row["zip_code"],
+                                    message, payload)
+                    self.conn.execute(
+                        "UPDATE agent_episodes SET llm_status = 'done', directive_source = 'llm' "
+                        "WHERE episode_id = ?", (episode_id,))
+                else:
+                    self.conn.execute("UPDATE agent_episodes SET llm_status = ? WHERE episode_id = ?",
+                                      (outcome.status, episode_id))
 
     def _transition_message(self, zip_code: str, old: str, new: dict) -> str:
         name = self.zone_names[zip_code]

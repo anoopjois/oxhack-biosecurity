@@ -213,6 +213,61 @@ The agent runs when a zone **transitions** to CRITICAL.
    - Updates SQLite inventory and logs the events.
    - Calls a mock rideshare webhook ("pooled rides disabled in <zone>").
 
+### Agent design (Phase 3)
+Code lives in `backend/agent/`: `allocation.py` (pure maths), `executor.py`,
+`template.py`, `briefing.py`, `llm.py` and `worker.py`.
+
+**Allocation formulas**
+- `T_k = 2.0 · ℓ_k · P` is the surge target, where ℓ_k is the seeding per-capita level.
+- `F_j,k = ceil(0.6 · ℓ_k · P_j)` is the donor safety level.
+- `U_j,k = max(0, S_j,k − F_j,k)` is the donor surplus.
+
+**Allocation rules**
+- Donors must be SAFE right now. They are ranked by haversine distance, with
+  `zip_code` breaking ties.
+- Greedy fill, at most `MAX_DONORS = 3` per alert.
+- Same-tick alerts are processed highest projected score first, with `zip_code`
+  breaking ties.
+
+**Invariants (tested)**
+- Total stock never changes.
+- No donor ends below its safety level.
+- Exactly one episode per CRITICAL entry: `agent_episodes.status_event_id` is `UNIQUE`.
+- When an episode closes, pooled rides are re-enabled. Stock is not returned.
+
+**Events, in tick order**
+1. `AGENT_ALLOCATION`
+2. `AGENT_DIRECTIVE`, carrying `source` and `source_label`:
+   - `template` is labelled **"Rule-based briefing"**;
+   - `llm` is labelled **"AI briefing (Claude)"**.
+3. `RIDESHARE_WEBHOOK`, with direction `disable` or `enable`.
+
+**LLM**
+- Defaults: `LLM_MODEL=claude-opus-5-5`, `LLM_EFFORT=low`.
+- The request uses `client.beta.messages.create` with:
+  - structured outputs (`DIRECTIVE_SCHEMA`, which has no quantity fields);
+  - `fallbacks="default"` (beta `server-side-fallback-2026-07-01`);
+  - a 15 s timeout and 1 retry.
+- It runs on a background thread pool after the tick commits.
+- A reset bumps `Simulation.generation`, and late results from before the reset are
+  discarded.
+
+**Briefing validation (both template and LLM)**
+- Pydantic schema; unknown fields are dropped and reported as `ignored_fields`.
+- **Number check:** every integer ≥ 100 in the text must appear in the episode
+  context.
+- Any failure keeps the rule-based briefing. `agent_episodes.llm_status` records why.
+
+**Reproducibility**
+- Comparisons exclude `source: "llm"` events.
+- When an LLM is active, comparisons also exclude event ids, because AI events take
+  ids whenever they arrive.
+
+**Testing and the real call**
+- Tests never call the API: fixtures pass `directive_writer=None` or a fake writer.
+- `scripts/llm_smoke.py` makes one real call with a real episode context. Run it
+  manually once a key exists.
+
 ## API
 
 - `GET  /api/v1/map-status`

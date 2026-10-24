@@ -16,7 +16,8 @@ def settings(tmp_path) -> Settings:
 
 @pytest.fixture
 def client(settings):
-    with TestClient(create_app(settings)) as c:  # context manager runs the lifespan (sim + clock)
+    # directive_writer=None: tests never call a real LLM, even if a key is configured.
+    with TestClient(create_app(settings, directive_writer=None)) as c:  # runs the lifespan (sim + clock)
         yield c
 
 
@@ -25,8 +26,9 @@ def make_sim(tmp_path):
     """Factory for independent Simulations, each with its own DB file."""
     sims = []
 
-    def make(seed: int = 42, name: str = "sim") -> Simulation:
-        sim = Simulation(Settings(db_path=tmp_path / f"{name}-{len(sims)}.sqlite3", seed=seed))
+    def make(seed: int = 42, name: str = "sim", writer=None, rideshare=None) -> Simulation:
+        sim = Simulation(Settings(db_path=tmp_path / f"{name}-{len(sims)}.sqlite3", seed=seed),
+                         directive_writer=writer, rideshare=rideshare)
         sims.append(sim)
         return sim
 

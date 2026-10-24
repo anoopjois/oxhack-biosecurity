@@ -12,7 +12,13 @@ load_dotenv(REPO_ROOT / ".env")
 
 # LLM (agent rationale and directives only; quantities are never set by the LLM)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-5-5")
+LLM_MODEL = os.getenv("LLM_MODEL", "claude-opus-5-5")
+LLM_EFFORT = os.getenv("LLM_EFFORT", "low")       # a short, structured writing task
+LLM_TIMEOUT_S = 15.0                               # per HTTP attempt
+LLM_MAX_RETRIES = 1                                # so at most ~30 s wall clock
+LLM_MAX_TOKENS = 4000
+LLM_WORKERS = 2                                    # background threads for LLM jobs
+LLM_FALLBACK_BETA = "server-side-fallback-2026-07-01"  # enables fallbacks="default"
 
 # Storage
 DB_PATH = REPO_ROOT / os.getenv("DB_PATH", "backend/biosecurity.sqlite3")
@@ -34,6 +40,26 @@ ANTIVIRAL_PER_CAPITA = 0.005
 VACCINE_PER_CAPITA = 0.01
 STOCK_JITTER_RANGE = (0.8, 1.2)
 INVENTORY_RNG_STREAM = 1  # inventory draws use rng((seed, stream)), independent of telemetry
+
+# Agent: allocation (see backend/agent/allocation.py for the formulas)
+SURGE_MULTIPLIER = 2.0    # an outbreak zone should hold 2x its normal per-capita stock
+SAFETY_FRACTION = 0.6     # a donor never drops below 60% of its normal per-capita stock
+MAX_DONORS = 3            # donors per alert, so the feed stays readable
+EARTH_RADIUS_KM = 6371.0  # for the haversine distance
+
+# Agent: rideshare containment (mock webhook)
+RIDESHARE_REVIEW_DAYS = 7
+RIDESHARE_RADIUS_KM = 25.0
+
+# Agent: briefing rules and validation
+NEIGHBOUR_COUNT = 5         # nearest zones considered "neighbours"
+FAST_DOUBLING_DAYS = 3.0    # doubling faster than this triggers A&E surge staffing
+TRANSIT_MOBILITY_M = 0.5    # M above this adds transit guidance to the public advisory
+HEADLINE_MAX_CHARS = 140
+RATIONALE_MAX_CHARS = 1500
+DIRECTIVES_RANGE = (1, 6)
+NUMBER_CHECK_MIN = 100      # every integer >= this in briefing text must appear in the context
+SOURCE_LABELS = {"template": "Rule-based briefing", "llm": "AI briefing (Claude)"}
 
 # Events API
 EVENTS_DEFAULT_LIMIT = 100
