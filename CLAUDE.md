@@ -34,6 +34,7 @@ this file wins.** The overrides are listed at the bottom.
 | `backend/` | Python 3, FastAPI, SQLite, numpy, pandas, pytest. It imports `engine/` directly and owns the simulation clock, the DB, the agent and the API. |
 | `frontend/` | React, Vite and TypeScript, with react-leaflet (OpenStreetMap tiles) and recharts. |
 | `./dev.sh` | One command that starts everything locally. |
+| `scripts/` | Dev-only tools, such as `plot_outbreak.py` (matplotlib, from `requirements-dev.txt`). The demo never needs them. |
 
 ## Zones
 
@@ -51,9 +52,11 @@ this file wins.** The overrides are listed at the bottom.
 These are statistical methods, not ML.
 
 ### Preprocessing
-- Resample the data to one row per zone per day.
+- Resample the data to one row per zone per day. Missing days are forward-filled for at most
+  2 consecutive days; any further days in a longer gap stay NaN.
 - Floor wastewater at `DETECTION_LIMIT` before taking logs.
-- `x(t) = log(3-day trailing mean of wastewater)`.
+- `y(t) = log(max(W(t), DL))` is the **raw** daily log wastewater.
+- `x(t) = log(3-day trailing mean of wastewater)` is the smoothed version.
 
 ### Baseline and z-scores
 - The baseline is the per-zone mean and std over days **t-17 .. t-4**. The 4-day gap
@@ -75,10 +78,21 @@ These are statistical methods, not ML.
   `r_hat` (growth rate per day), its standard error `se_r`, and the doubling time
   `ln2 / r_hat` when `r_hat > 0`.
 - Project `x` forward to t+2 using `r_hat`.
-- Project ER using the lag `L = 4`. ER(t+2) depends on wastewater at t−2, which is
-  **already observed**, so this part of the forecast needs no extrapolation:
-  `ER_hat(t+2) = μ_E + BETA_ER · (x(t−2) − μ_x)`.
-  `BETA_ER` is a calibration constant, matched to the generator's 20.
+- Project ER using the lag `L = 4`. ER(t+2) depends on wastewater at t−2. This is
+  the "V5" estimator, chosen by prototype in Phase 1:
+  - Estimate log W(t−2) from the **fitted OLS line** at centred day d = +1:
+    `ŷ(t−2) = ȳ + r_hat · 1`.
+  - Use the baseline mean of **raw** y, `μ_y`:
+    `ER_hat(t+2) = μ_E + BETA_ER · (ŷ(t−2) − μ_y)`.
+  - `BETA_ER` is a calibration constant, matched to the generator's 20.
+  - **Why not x(t−2)?** The 3-day mean lags about 1 day. The fitted line has no lag,
+    and its SD is about σ·√(1/7 + 1/28) ≈ 0.13, below x's ≈ 0.17.
+  - **What data it uses:** only data up to t (no look-ahead). This includes y(t−1) and
+    y(t). Asserting `H ≤ L` keeps day t+H−L inside the fit window, so the estimate is
+    interpolation, not extrapolation.
+  - **Known bias:** when the 7-day window straddles the outbreak's onset (k < 6 days
+    since onset), the straight line overshoots the kink. The bias is upward and vanishes
+    by k = 6. It adds a little lead time and doesn't affect clean zones.
 - `projected_score = combine(z of projected x, z of projected ER, M)`.
 
 ### Status
@@ -88,15 +102,34 @@ Status is computed **statelessly** by replaying the days in order up to the as-o
 |---|---|
 | `INSUFFICIENT_DATA` | During warm-up, while there is not enough history for the baseline window. |
 | `CRITICAL` (enter) | `projected_score ≥ 80` **and** `r_hat − 2·se_r > 0` (growth is significantly positive). |
-| `CRITICAL` (hold) | Hysteresis keeps a zone CRITICAL until its **current** score drops below 70. |
+| `CRITICAL` (hold) | The zone stays CRITICAL until its **current score < 70 *and* the entry condition no longer holds**. CRITICAL fires before the current score reaches 70, so a pure current-score exit would drop the alert the next day. |
 | `ELEVATED` | `score > 40` |
 | `SAFE` | Anything else. |
 
-While a zone is CRITICAL, its baselines are **frozen** at their pre-alert values.
+While a zone is CRITICAL, its baselines are **frozen** at the window t−17..t−4 from the
+day it entered CRITICAL. They unfreeze on the day it exits.
 
 ### Required tests
 1. Zero CRITICAL statuses on clean zones, across 200 seeds.
-2. CRITICAL fires **before** the current score crosses 80. Report the lead time.
+2. CRITICAL comes **on or before** the day the current score crosses 80 in ≥ 95% of
+   seeds, and the **median lead is ≥ 2 days**.
+   - Report the spread of lead times.
+   - Also report the yellow-warning timing: the first ELEVATED day after onset, as
+     k = days since onset.
+   - These are the pitch numbers.
+
+**Measured in Phase 1** (200 seeds, r = 0.4, onset on day 28):
+- Zero CRITICAL in 193,200 clean zone-days. ELEVATED on 3.1% of clean zone-days.
+- Red lead: mean 2.25 days, median 2; on or before the crossing in 100% of seeds.
+- Median k (days since onset):
+
+  | Event | Median k |
+  |---|---|
+  | First yellow or red | 2 |
+  | First red (CRITICAL) | 4 |
+  | Current score ≥ 80 | 6 |
+
+- No alert faded before onset + 12.
 3. No look-ahead: changing data after the as-of date never changes the output.
 4. The alert does not fade before onset + 12 days.
 

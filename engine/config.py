@@ -22,6 +22,10 @@ DETECTION_LIMIT = 1_000.0
 # x(t) = log(mean of wastewater over days t-2, t-1, t): a 3-day trailing mean.
 SMOOTH_WINDOW_DAYS = 3
 
+# When resampling to daily rows, a missing day is filled with the last reading, but
+# only for up to this many consecutive days. Longer gaps stay NaN.
+FFILL_MAX_DAYS = 2
+
 # --------------------------------------------------------------------------- #
 # Baseline: per-zone mean and std over days t-17 .. t-4 (inclusive)
 # --------------------------------------------------------------------------- #
@@ -33,6 +37,10 @@ BASELINE_END_LAG_DAYS = 4     # newest day in the window is t - 4
 # Days of data needed before a zone can be scored: x at t-17 needs a full 3-day mean,
 # so the earliest raw reading used is t-17-(3-1) = t-19, i.e. 20 days in total.
 MIN_HISTORY_DAYS = BASELINE_START_LAG_DAYS + SMOOTH_WINDOW_DAYS
+
+# A baseline window (14 days) with gaps is still usable if at least this many days
+# are present; otherwise the day is INSUFFICIENT_DATA.
+BASELINE_MIN_VALID_DAYS = 10
 
 # --------------------------------------------------------------------------- #
 # Noise levels (shared by generator and engine)
@@ -70,11 +78,21 @@ SCORE_MAX = 100.0
 FORECAST_FIT_DAYS = 7
 FORECAST_HORIZON_DAYS = 2  # we project to t + 2
 
+# The OLS fit needs at least this many of its 7 days present (it has n - 2 d.o.f.).
+FORECAST_MIN_VALID_DAYS = 5
+
 # ER responds to wastewater with a lag of L days (people get sick, then go to A&E).
 ER_LAG_DAYS = 4
 
-# ER_hat(t+2) = mu_E + BETA_ER * (x(t+2-L) - mu_x). Calibrated to match the generator.
+# ER_hat(t+H) = mu_E + BETA_ER * (y_hat(t+H-L) - mu_y), where y_hat is the fitted OLS
+# line of raw log wastewater (the "V5" estimator). Calibrated to match the generator.
 BETA_ER = 20.0
+
+# H <= L means ER(t+H) is driven by wastewater on a day we have already seen.
+# L - H <= FIT - 1 means that day lies inside the 7-day fit window, so y_hat there is
+# interpolation, not extrapolation.
+assert FORECAST_HORIZON_DAYS <= ER_LAG_DAYS
+assert ER_LAG_DAYS - FORECAST_HORIZON_DAYS <= FORECAST_FIT_DAYS - 1
 
 # "Significantly growing" means r_hat - SE_MULTIPLIER * SE > 0. With 7 points (5
 # degrees of freedom) this is roughly a one-sided 5% test.
