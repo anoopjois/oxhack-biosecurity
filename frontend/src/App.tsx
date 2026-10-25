@@ -165,10 +165,10 @@ export default function App() {
                    onZoneClick={onZoneClick} />
           {showCoach && (
             <div className="coach" role="dialog" aria-label="Getting started" data-testid="coach">
-              <h2>Watch an outbreak unfold</h2>
-              <p>Press <b>★ Run demo</b>: a simulated pathogen spike hits Greater Manchester. Watch the system
-                spot it in wastewater and forecast the surge two days early. Review the short incident summary,
-                then approve a Gemini-generated PDF report to be emailed to the configured test recipient.
+              <h2>Viral outbreak risk, before the surge</h2>
+              <p>Press <b>★ Run demo</b> to follow a Greater Manchester outbreak scenario. BioSecure combines
+                wastewater viral load, A&E pressure and mobility into a 0–100 early-warning index and a
+                48-hour risk forecast. Review outbreak alerts and approve a PDF report for the configured recipient.
                 Nothing is sent automatically.</p>
               <div className="coach-actions">
                 <button className="btn btn-primary" onClick={runDemo}>★ Run demo</button>

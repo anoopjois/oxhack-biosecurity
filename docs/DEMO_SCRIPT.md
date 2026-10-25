@@ -8,7 +8,9 @@ Use the [checklist](DEMO_CHECKLIST.md) first. All data and alerts are synthetic.
 Wastewater can show a rise before hospital pressure becomes obvious. We forecast
 risk 48 hours ahead so an operator can review a developing incident early."
 
-Point to the **SIMULATED DATA** badge and click **Run demo**.
+Point to **Viral outbreak early warning** and the **Proof of concept** badge. Explain
+that this presentation uses generated data, then click **Run demo**. The dashboard
+shows assessment dates rather than simulation day counters.
 
 ## 0:30 - Detection
 
@@ -20,6 +22,11 @@ The system sees only the telemetry observed so far, not our injected ground trut
 
 Point to the zone chart and the incident's short summary. No incident card is shown
 before detection. The synthetic spike remains only a demo control/chart marker.
+
+"These are viral outbreak risk indices out of 100, not infection probabilities or
+confirmed cases. The inputs are wastewater viral load (50%), A&E waiting-time
+pressure (35%), and mobility/crowding (15%). Viral doubling time describes the
+wastewater signal, not the number of patients."
 
 ## 1:00 - Human-approved notification
 

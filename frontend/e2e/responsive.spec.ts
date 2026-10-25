@@ -22,8 +22,8 @@ const incidents = [
   event('STATUS_CHANGE', { from: 'ELEVATED', to: 'CRITICAL', projected_score: 94 },
     { event_id: index * 2 + 2, zip_code: z.zip_code }),
   event('INCIDENT_OPENED', { episode_id: index + 1, status: 'awaiting_approval',
-    recipient: 'synthetic-exercise-notifications@example.test',
-    summary: `${z.zone_name} has a critical early-warning forecast. Review the synthetic evidence before approving a report.` },
+    recipient: 'outbreak-notifications@example.test',
+    summary: `${z.zone_name} has a critical early-warning forecast for viral outbreak risk. Review the observed signals before approving a report.` },
   { event_id: index * 2 + 3, zip_code: z.zip_code }),
 ])]
 
@@ -54,7 +54,7 @@ async function mockSimulation(page: Page, current: Clock, events: SimEvent[]) {
     throw new Error(`Unexpected API request: ${url.pathname}`)
   })
   await page.goto('/')
-  await expect(page.getByTestId('clock-day')).toBeVisible()
+  await expect(page.getByTestId('clock-date')).toBeVisible()
 }
 
 async function fitsHorizontally(page: Page) {
@@ -133,8 +133,8 @@ test('resizing preserves the map, chart, long names and all incident approval co
         await button.click({ trial: true })
         await insideViewport(button)
       }
-      await page.getByRole('button', { name: 'About Doubling' }).scrollIntoViewIfNeeded()
-      await page.getByRole('button', { name: 'About Doubling' }).click()
+      await page.getByRole('button', { name: 'About Viral doubling time' }).scrollIntoViewIfNeeded()
+      await page.getByRole('button', { name: 'About Viral doubling time' }).click()
       await insideViewport(page.getByRole('tooltip'))
       await page.keyboard.press('Escape')
       await fitsHorizontally(page)
@@ -243,4 +243,25 @@ test('opening another header panel closes the previous panel', async ({ page }) 
   await page.getByTestId('speed').click()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('menu')).toBeHidden()
+})
+
+test('PoC dashboard explains viral outbreak risk and its inputs without simulation counters', async ({ page }, info) => {
+  await mockSimulation(page, clock({ day: 33, sim_date: '2026-10-04' }), incidents)
+  await expect(page.getByTestId('poc-badge')).toHaveText('PROOF OF CONCEPT')
+  await expect(page.getByText('Viral outbreak early warning', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('clock-date')).toHaveAttribute('datetime', '2026-10-04')
+  await expect(page.locator('body')).not.toContainText(/synthetic|simulated data|day \d+ of \d+/i)
+  const explanation = page.getByTestId('risk-explanation')
+  await expect(explanation).toContainText('Wastewater viral load50%')
+  await expect(explanation).toContainText('A&E waiting-time pressure35%')
+  await expect(explanation).toContainText('Mobility & crowding15%')
+  await expect(explanation).toContainText('not an infection probability')
+  await page.screenshot({ path: info.outputPath('poc-overview.png') })
+  await page.getByRole('button', { name: 'Greater Manchester: 48-hour outbreak risk 94 out of 100' }).click()
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('Outbreak risk now')
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('Outbreak risk in 48h')
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('Viral doubling time')
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('82 / 100')
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('94 / 100')
+  await expect(page.locator('body')).not.toContainText(/synthetic|simulated data|day \d+ of \d+/i)
 })

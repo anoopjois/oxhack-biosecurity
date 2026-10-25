@@ -5,8 +5,11 @@ test.describe.configure({ mode: 'serial' })
 
 async function freshBackend(request: APIRequestContext) {
   await request.post('/api/v1/clock/pause')
-  await request.post('/api/v1/clock/reset', { data: { seed: 42 } })
+  return (await (await request.post('/api/v1/clock/reset', { data: { seed: 42 } })).json()).clock
 }
+
+const dateForDay = (firstDate: string, day: number) =>
+  new Date(Date.parse(firstDate) + day * 86_400_000).toISOString().slice(0, 10)
 
 async function detect(request: APIRequestContext) {
   await request.post('/api/v1/trigger-outbreak', { data: { zone: 'greater-manchester', r: 0.4 } })
@@ -26,7 +29,7 @@ async function expectFitsViewport(page: Page) {
 }
 
 test('detection shows summary and explicit email approval, without hidden spike, stock or rideshare', async ({ page, request }, info) => {
-  await freshBackend(request)
+  const initial = await freshBackend(request)
   await page.goto('/')
   await expect(page.getByTestId('coach')).toBeVisible()
   await page.getByTestId('coach-dismiss').click()
@@ -37,7 +40,7 @@ test('detection shows summary and explicit email approval, without hidden spike,
   await expect(page.getByTestId('incidents-empty')).toBeVisible()
   for (let day = 28; day <= 41; day++) {
     await page.getByTestId('step').click()
-    await expect(page.getByTestId('clock-day')).toHaveText(`Day ${day} of 41`)
+    await expect(page.getByTestId('clock-date')).toHaveAttribute('datetime', dateForDay(initial.first_date, day))
     if (await page.locator(`${GM_RING}[data-status="CRITICAL"]`).count()) break
   }
   const card = page.getByTestId('incident')
@@ -64,20 +67,20 @@ test('pending approval survives reload and never blocks steps', async ({ page, r
   await detect(request)
   await page.goto('/')
   await expect(page.getByTestId('approve')).toBeVisible()
-  const before = await page.getByTestId('clock-day').textContent()
+  const before = await page.getByTestId('clock-date').getAttribute('datetime')
   await page.getByTestId('step').click()
-  await expect(page.getByTestId('clock-day')).not.toHaveText(before!)
+  await expect(page.getByTestId('clock-date')).not.toHaveAttribute('datetime', before!)
   await expect(page.getByTestId('approve')).toBeVisible()
   await page.reload()
   await expect(page.getByTestId('approve')).toBeVisible()
 })
 
 test('Run demo reaches the end without automatic emails and resets cleanly', async ({ page, request }) => {
-  await freshBackend(request)
+  const initial = await freshBackend(request)
   await page.goto('/')
   await page.getByTestId('run-demo').click()
   await expect(page.getByTestId('incident')).toBeVisible({ timeout: 20_000 })
-  await expect(page.getByTestId('clock-day')).toHaveText('Day 41 of 41', { timeout: 30_000 })
+  await expect(page.getByTestId('clock-date')).toHaveAttribute('datetime', initial.last_date, { timeout: 30_000 })
   await expect(page.getByTestId('approve')).toBeVisible()
   await expect(page.getByTestId('end-banner')).toBeVisible()
   await expect(page.getByTestId('play')).toBeDisabled()
@@ -87,16 +90,16 @@ test('Run demo reaches the end without automatic emails and resets cleanly', asy
 })
 
 test('keyboard shortcuts, theme and offline map remain available', async ({ page, request }) => {
-  await freshBackend(request)
+  const initial = await freshBackend(request)
   await page.goto('/')
   await page.getByTestId('coach-dismiss').click()
   await page.locator('body').press('ArrowRight')
-  await expect(page.getByTestId('clock-day')).toHaveText('Day 28 of 41')
+  await expect(page.getByTestId('clock-date')).toHaveAttribute('datetime', dateForDay(initial.first_date, 28))
   await page.locator('body').press('s')
   await expect(page.getByTestId('spike-dialog')).toBeVisible()
   await page.getByTestId('spike-r-input').focus()
   await page.keyboard.press('ArrowRight')
-  await expect(page.getByTestId('clock-day')).toHaveText('Day 28 of 41')
+  await expect(page.getByTestId('clock-date')).toHaveAttribute('datetime', dateForDay(initial.first_date, 28))
   await page.keyboard.press('Escape')
   await page.getByTestId('theme').click()
   await page.getByTestId('theme').click()

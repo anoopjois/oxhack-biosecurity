@@ -197,14 +197,15 @@ button { font: inherit; color: inherit; }
 .brand { display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
 .brand-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); flex: none; }
 .brand h1 { font-size: 1.1rem; font-weight: 750; letter-spacing: -0.01em; white-space: nowrap; }
-.badge-simulated {
+.brand-title p { font-size: 0.75rem; color: var(--ink-2); white-space: nowrap; }
+.badge-poc {
   font-size: 0.7rem; font-weight: 750; letter-spacing: 0.08em; color: var(--ink-2); white-space: nowrap;
   border: 1.5px solid var(--line-strong); border-radius: 6px; padding: 2px 6px;
 }
 .when { flex: 1; text-align: center; line-height: 1.15; min-width: 180px; }
 .when-date { display: block; font-size: 1.4rem; font-weight: 750; white-space: nowrap; }
-.when-day { font-size: 0.8rem; color: var(--muted); }
-.when-held { color: var(--accent-ink); font-weight: 700; }
+.when-label { display: block; font-size: 0.7rem; color: var(--muted); }
+.when-held { display: block; font-size: 0.75rem; color: var(--accent-ink); font-weight: 700; }
 .controls { display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
 .group { display: inline-flex; align-items: stretch; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .group > button, .group > .popover-anchor > button {
@@ -385,7 +386,7 @@ kbd {
 .zone { display: flex; flex-direction: column; }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); margin: 0; }
 .stat { min-width: 0; }
-.stat dt { font-size: 0.75rem; color: var(--muted); font-weight: 650; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.stat dt { min-height: 2.7em; font-size: 0.75rem; color: var(--muted); font-weight: 650; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .stat dd { margin: 0; font-size: 1.45rem; font-weight: 750; font-variant-numeric: tabular-nums; }
 .stat dd small { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
 .stat-hot dd { color: var(--critical); }
@@ -415,7 +416,14 @@ kbd {
 .caption { margin-top: var(--s2); padding: 8px 12px; border-radius: 10px; background: var(--surface-2); font-weight: 650; font-size: 0.95rem; }
 .caption-lead { background: var(--critical-soft); color: var(--caption-lead-ink); }
 .caption b { font-size: 1.1rem; }
-.overview-headline { font-size: 1.5rem; font-weight: 750; margin-bottom: 6px; }
+.overview-headline { font-size: 1.3rem; font-weight: 750; margin-bottom: 6px; }
+.overview-status { font-weight: 650; margin-bottom: var(--s2); }
+.risk-explanation { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--line); }
+.risk-explanation h3 { font-size: 0.85rem; font-weight: 700; }
+.risk-explanation p { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+.risk-factors { list-style: none; padding: 0; margin: var(--s2) 0; display: grid; gap: var(--s1); font-size: 0.85rem; }
+.risk-factors li { display: flex; justify-content: space-between; gap: var(--s3); }
+.risk-factors b { flex-shrink: 0; color: var(--accent-ink); }
 .explain { color: var(--ink-2); font-size: 0.9rem; margin-bottom: var(--s3); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .counts { display: flex; gap: var(--s4); font-weight: 650; flex-wrap: wrap; }
 .counts > span { display: inline-flex; align-items: center; gap: 6px; }
@@ -509,12 +517,17 @@ kbd {
 
 @media (max-width: 480px) {
   .header { grid-template-columns: minmax(0, 1fr); padding: var(--s3); }
+  .brand { flex-wrap: wrap; row-gap: var(--s1); }
   .when { text-align: left; min-width: 0; }
   .controls { gap: var(--s2); }
   .controls > .group { width: 100%; justify-content: space-between; }
   .controls > .group > button, .controls > .group > .popover-anchor { flex: 1; }
   .group > .popover-anchor > button { width: 100%; }
   .card { padding: var(--s3); }
+  .stats { grid-template-columns: minmax(0, 1fr); }
+  .stat { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+  .stat dt { min-height: 0; }
+  .stat dd { flex-shrink: 0; }
   .coach { padding: var(--s3); }
   .map-legend { gap: var(--s2); padding: 6px 8px; font-size: 0.8rem; }
 }

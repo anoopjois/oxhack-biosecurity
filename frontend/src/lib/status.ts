@@ -19,11 +19,20 @@ export const PIN_DOT_RADIUS = 3.6
 export const PIN_RING_RADIUS = 8
 export const PIN_SELECTED_RADIUS = 12.5
 
-/** Plain-language explanation of the risk score (two sentences). */
+export const RISK_FACTORS = [
+  { label: 'Wastewater viral load', weight: '50%' },
+  { label: 'A&E waiting-time pressure', weight: '35%' },
+  { label: 'Mobility & crowding', weight: '15%' },
+] as const
+
+/** Explain the index, its inputs and the alert rules without implying a diagnosis. */
 export const RISK_SCORE_HELP =
-  'The risk score (0–100) measures how unusual an area looks compared with its own recent normal: ' +
-  'above 40 is elevated, and an alert is raised when the score forecast 48 hours ahead passes 80 while the virus is clearly growing. ' +
-  'It combines virus levels in sewage water (50%), A&E waiting times (35%) and how crowded the area is (15%).'
+  'Viral outbreak risk is an early-warning index from 0–100, not an infection probability or a confirmed case count. ' +
+  'It combines ' + RISK_FACTORS.map((factor) => `${factor.label} (${factor.weight})`).join(', ') + '. ' +
+  'Wastewater and A&E signals are compared with the area’s recent baseline. ' +
+  'Elevated means the current index is above 40; a critical alert starts when the 48-hour forecast is at least 80 ' +
+  'and wastewater viral growth is statistically clear. ' +
+  'A critical alert remains active until the current index falls below 70 and its entry condition no longer holds.'
 
 export function countByStatus(statuses: Status[]): Record<Status, number> {
   const counts: Record<Status, number> = { CRITICAL: 0, ELEVATED: 0, SAFE: 0, INSUFFICIENT_DATA: 0 }

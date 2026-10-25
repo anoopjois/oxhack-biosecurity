@@ -25,6 +25,9 @@ def test_incident_does_not_move_stock_or_run_old_actions(make_sim):
     assert types.isdisjoint({"AGENT_ALLOCATION", "AGENT_DIRECTIVE", "RIDESHARE_WEBHOOK"})
     context = json.loads(episode["context"])
     assert context["synthetic"]
+    assert "viral outbreak risk" in episode["summary"].lower()
+    assert "synthetic" not in episode["summary"].lower()
+    assert events(sim, "type = 'INCIDENT_OPENED'")[0]["payload"]["summary"] == episode["summary"]
     assert context["observed"]["status"] == "CRITICAL"
     assert "outbreaks" not in context and "start_day" not in context
     step_to_end(sim)  # pending notification does not block the clock or auto-approve

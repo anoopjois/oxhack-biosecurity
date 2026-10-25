@@ -73,9 +73,9 @@ describe('timeline', () => {
   it('places spike, alert and would-hit-80 markers by day', () => {
     expect(timelineMarkers('2026-09-01', { spike: '2026-09-28', alert: '2026-10-02', hit: '2026-10-04' }))
       .toEqual([
-        { kind: 'spike', day: 27, label: 'Spike' },
+        { kind: 'spike', day: 27, label: 'Viral surge' },
         { kind: 'alert', day: 31, label: 'Alert raised' },
-        { kind: 'hit', day: 33, label: 'Would have hit 80' },
+        { kind: 'hit', day: 33, label: 'Risk reached 80' },
       ])
     expect(timelineMarkers('2026-09-01', {})).toEqual([])
   })
