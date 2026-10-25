@@ -49,3 +49,23 @@ See the [setup instructions](../README.md) and [talk track](DEMO_SCRIPT.md).
 Space: play/pause; right arrow: step; R: reset confirmation; S: demo spike; ?: help.
 Shortcuts do not fire while typing. The built-in map works offline; optional street
 tiles fall back to it if unavailable. Reports and email still need network access.
+
+## Responsive layout checks
+
+- Resize from desktop to tablet/phone and back with an area selected and an incident
+  awaiting approval. The date and controls must wrap without overlapping.
+- Small/short windows stack the map above the panels and scroll vertically. Desktop
+  panels scroll together so neither the chart nor approval actions get clipped.
+- On phones only the selected area's name stays pinned, avoiding overlapping map
+  labels. Hover another pin or tap it to see its name and full area details.
+- Open help, speed, reset confirmation, spike selection and risk tooltips near screen
+  edges. They must fit the viewport; long dialogs scroll internally.
+- The timeline gives event labels separate rows and scrolls horizontally on narrow
+  screens to keep its labels readable. Nearby chart markers also use separate rows.
+- Run the mocked browser regression suite against a running frontend (no backend,
+  Gemini requests or emails needed):
+  ```powershell
+  cd frontend
+  $env:PLAYWRIGHT_BASE_URL = 'http://localhost:5173'
+  npx playwright test responsive.spec.ts --project=chromium-720 --project=webkit-720
+  ```

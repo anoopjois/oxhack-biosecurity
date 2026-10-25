@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Clock } from '../api/types'
-import { SHORTCUTS, SPEEDS } from '../lib/behaviour'
+import { SHORTCUTS, SPEEDS, shortcutFor } from '../lib/behaviour'
 import { lastDay, longDate } from '../lib/format'
 import { RISK_SCORE_HELP } from '../lib/status'
 import { THEME_PREFS, type ThemePref } from '../state/useTheme'
@@ -36,12 +36,21 @@ interface Props {
   onShowLog: (show: boolean) => void
   onTheme: (theme: ThemePref) => void
   onCycleTheme: () => void
+  onClosePanels: () => void
 }
 
 export function Header(p: Props) {
   const { clock } = p
   const confirmButton = useRef<HTMLButtonElement>(null)
   const [speedOpen, setSpeedOpen] = useState(false)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const action = shortcutFor(e)
+      if (e.key === 'Escape' || action === 'help' || action === 'reset' || action === 'spike') setSpeedOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
   useEffect(() => {
     if (p.confirmReset) confirmButton.current?.focus()
   }, [p.confirmReset])
@@ -79,7 +88,7 @@ export function Header(p: Props) {
           <button onClick={p.onStep} disabled={!clock || atEnd || p.busy || playing} data-testid="step"
                   title={why ?? (playing ? 'Pause to step one day at a time' : 'Step one day (→)')}>⏭ Step</button>
           <div className="popover-anchor">
-            <button onClick={() => setSpeedOpen((o) => !o)} disabled={!clock || atEnd} aria-haspopup="menu"
+            <button onClick={() => { p.onClosePanels(); setSpeedOpen((o) => !o) }} disabled={!clock || atEnd} aria-haspopup="menu"
                     aria-expanded={speedOpen} data-testid="speed" title={why ?? 'Seconds per simulated day'}>
               {p.speed}s / day ▾
             </button>
@@ -95,7 +104,7 @@ export function Header(p: Props) {
             )}
           </div>
           <div className="popover-anchor">
-            <button onClick={p.onAskReset} disabled={!clock || p.busy} aria-label="Reset" title="Reset (R)"
+            <button onClick={() => { setSpeedOpen(false); p.onAskReset() }} disabled={!clock || p.busy} aria-label="Reset" title="Reset (R)"
                     data-testid="reset">↺</button>
             {p.confirmReset && (
               <div className="popover popover-right" role="dialog" aria-label="Confirm reset" data-testid="reset-confirm">
@@ -110,7 +119,7 @@ export function Header(p: Props) {
         </div>
 
         <div className="popover-anchor">
-          <button className="btn" onClick={p.onSpike} disabled={!clock || atEnd} data-testid="spike"
+          <button className="btn" onClick={() => { setSpeedOpen(false); p.onSpike() }} disabled={!clock || atEnd} data-testid="spike"
                   title={why ?? 'Inject a simulated outbreak (S)'}>⚠ Simulate spike</button>
           {p.spikeSlot}
         </div>
@@ -121,10 +130,12 @@ export function Header(p: Props) {
                 aria-label={`Theme: ${THEME_META[p.theme].label}. Click to change`}
                 title={`Theme: ${THEME_META[p.theme].label} (click to change)`}>{THEME_META[p.theme].icon}</button>
         <div className="popover-anchor">
-          <button className="btn btn-ghost btn-icon" onClick={p.onToggleHelp} aria-label="Help and settings"
+          <button className="btn btn-ghost btn-icon" onClick={() => { setSpeedOpen(false); p.onToggleHelp() }} aria-label="Help and settings"
                   aria-expanded={p.helpOpen} data-testid="help">?</button>
           {p.helpOpen && (
             <div className="popover popover-right help" role="dialog" aria-label="Help and settings" data-testid="help-popover">
+              <button className="btn btn-ghost btn-icon popover-close" onClick={p.onToggleHelp}
+                      aria-label="Close help and settings">✕</button>
               <h3>Keyboard shortcuts</h3>
               <dl className="shortcuts">
                 {SHORTCUTS.map((s) => (
