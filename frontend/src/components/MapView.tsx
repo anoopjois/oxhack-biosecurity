@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css'
 import type { AllocationPayload, Zone } from '../api/types'
 import { shouldUseOffline, TILE_TIMEOUT_MS } from '../lib/behaviour'
 import { compact, shortName } from '../lib/format'
-import { arcPoints, arrowRotation, CITIES, ENGLAND_BOUNDS, labelOffset, MAX_BOUNDS, visibleCities, zoneLabelSide, type LatLng } from '../lib/geo'
+import { arcPoints, arrowRotation, CITIES, ENGLAND_BOUNDS, labelOffset, MAX_BOUNDS, visibleCities, ZONE_LABEL_CHAR_PX, ZONE_LABEL_GAP_PX, zoneLabelSide, type LatLng } from '../lib/geo'
 import { countByStatus, PIN_DOT_RADIUS, PIN_RING_RADIUS, PIN_SELECTED_RADIUS, STATUS_META } from '../lib/status'
 
 /** 'vector': built-in outline (default, seam-free, offline). 'tiles': greyscale OSM at integer zoom. */
@@ -202,7 +202,10 @@ function Tiles({ onFallBack }: { onFallBack: () => void }) {
 function Cities({ zones }: { zones: Zone[] }) {
   const map = useMap()
   const [version, setVersion] = useState(0)
-  useMapEvents({ zoomend: () => setVersion((v) => v + 1), moveend: () => setVersion((v) => v + 1) })
+  useMapEvents({
+    zoomend: () => setVersion((v) => v + 1), moveend: () => setVersion((v) => v + 1),
+    resize: () => setVersion((v) => v + 1),
+  })
   const shown = useMemo(() => {
     const pins = zones.map((z) => map.latLngToContainerPoint([z.latitude, z.longitude]))
     return visibleCities(CITIES, (ll) => map.latLngToContainerPoint(ll), pins)
@@ -225,8 +228,10 @@ function Cities({ zones }: { zones: Zone[] }) {
  * change of state eases over 600 ms instead of jumping. CRITICAL adds an outward pulse.
  */
 function Pin({ zone, selected, onClick }: { zone: Zone; selected: boolean; onClick: (zip: string) => void }) {
+  const map = useMap()
   const ring = useRef<L.CircleMarker>(null)
   const dot = useRef<L.CircleMarker>(null)
+  const tooltip = useRef<L.Tooltip>(null)
   const center: LatLng = [zone.latitude, zone.longitude]
   useEffect(() => {
     for (const layer of [ring.current, dot.current]) {
@@ -249,10 +254,29 @@ function Pin({ zone, selected, onClick }: { zone: Zone; selected: boolean; onCli
       )}
       <CircleMarker ref={ring} center={center} radius={PIN_RING_RADIUS}
                     pathOptions={{ className: 'pin-ring', weight: 2, fillOpacity: 0.92 }}
-                    eventHandlers={{ click: () => onClick(zone.zip_code) }}>
-        {/* Hover name for unlabelled areas; CRITICAL and selected ones already carry a pinned label. */}
-        {zone.status !== 'CRITICAL' && !selected && (
-          <Tooltip direction="right" offset={[10, 0]} className="zone-label">
+                    eventHandlers={{
+                      click: () => onClick(zone.zip_code),
+                      tooltipopen: () => {
+                        const tip = tooltip.current
+                        const bounds = tip?.getElement()?.getBoundingClientRect()
+                        if (!tip || !bounds) return
+                        const mapBounds = map.getContainer().getBoundingClientRect()
+                        const left = Math.max(8, mapBounds.left + 8)
+                        const right = Math.min(window.innerWidth - 8, mapBounds.right - 8)
+                        const top = Math.max(8, mapBounds.top + 8)
+                        const bottom = Math.min(window.innerHeight - 8, mapBounds.bottom - 8)
+                        const dx = Math.max(left, Math.min(bounds.left, right - bounds.width)) - bounds.left
+                        const dy = Math.max(top, Math.min(bounds.top, bottom - bounds.height)) - bounds.top
+                        if (dx || dy) {
+                          tip.options.offset = L.point(tip.options.offset ?? [0, 0]).add([dx, dy])
+                          tip.update()
+                        }
+                      },
+                    }}>
+        {/* Small screens pin only the selection; other critical names remain available on hover. */}
+        {!selected && (
+          <Tooltip ref={tooltip} direction="auto" offset={[10, 0]}
+                   className={`zone-label${zone.status === 'CRITICAL' ? ' zone-label-compact' : ''}`}>
             {zone.zone_name} · {STATUS_META[zone.status].label}
           </Tooltip>
         )}
@@ -278,12 +302,20 @@ function ZoneLabels({ zones, selected }: { zones: Zone[]; selected: string | nul
                                        ...map.latLngToContainerPoint([z.latitude, z.longitude]) }))
     return labelled.map((z) => {
       const here = points.find((q) => q.zip === z.zip_code)!
-      const side = zoneLabelSide(z.zone_name, here, points.filter((q) => q.zip !== z.zip_code))
+      let side = zoneLabelSide(z.zone_name, here, points.filter((q) => q.zip !== z.zip_code))
+      const room = {
+        left: here.x - ZONE_LABEL_GAP_PX - 8,
+        right: map.getSize().x - here.x - ZONE_LABEL_GAP_PX - 8,
+      }
+      const opposite = side === 'left' ? 'right' : 'left'
+      const labelWidth = Math.min(240, z.zone_name.length * ZONE_LABEL_CHAR_PX + 16)
+      if (room[side] < labelWidth && room[opposite] > room[side]) side = opposite
+      const maxWidth = Math.max(0, Math.min(240, room[side]))
       return {
         key: `${z.zip_code}-${z.status}-${side}`, at: [z.latitude, z.longitude] as LatLng,
         icon: L.divIcon({ className: '', iconSize: [0, 0], html:
           `<div class="zone-label zone-label-pinned side-${side}${z.status === 'CRITICAL' ? ' zone-label-critical' : ''}" ` +
-          `data-zone="${z.zip_code}">${escapeHtml(z.zone_name)}</div>` }),
+          `style="max-width:${maxWidth}px" data-zone="${z.zip_code}"${z.zip_code === selected ? ' data-selected' : ''}>${escapeHtml(z.zone_name)}</div>` }),
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -16,6 +16,7 @@ const headerProps = {
   spikeSlot: null, onSpeed: noop, onPlay: noop, onPause: noop, onStep: noop, onAskReset: noop,
   onConfirmReset: noop, onCancelReset: noop, onSpike: noop, onRunDemo: noop, onToggleHelp: noop,
   onBaseMode: noop, onShowLog: noop, theme: 'auto' as const, onTheme: noop, onCycleTheme: noop,
+  onClosePanels: noop,
 }
 
 describe('Header', () => {
@@ -147,6 +148,12 @@ describe('Other panels', () => {
                                          selected={null} history={null} onSelect={noop} />)
     expect(screen.getByTestId('overview')).toHaveTextContent('1 area critical')
     rerender(<ZonePanel zones={[zone('a')]} selected="a" history={null} onSelect={noop} />)
+    const panel = screen.getByTestId('zone-panel')
+    expect(within(panel).getAllByRole('term')).toHaveLength(3)
+    expect(within(panel).getByText('Risk now', { selector: 'dt' })).toBeInTheDocument()
+    expect(within(panel).getByText('Risk in 48h')).toBeInTheDocument()
+    expect(within(panel).getByText('Doubling')).toBeInTheDocument()
+    expect(within(panel).queryByText(/A&E wait|usual/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'About Risk now' }))
     expect(screen.getByRole('tooltip')).toHaveTextContent(RISK_SCORE_HELP)
   })

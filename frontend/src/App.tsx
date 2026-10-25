@@ -95,7 +95,17 @@ export default function App() {
     setSpikeZone(selected ?? '')
     setSpikeOpen(true)
     setHelpOpen(false)
+    setConfirmReset(false)
   }, [clock, selected])
+  const closePanels = useCallback(() => {
+    setHelpOpen(false); setSpikeOpen(false); setConfirmReset(false)
+  }, [])
+  const askReset = useCallback(() => {
+    setHelpOpen(false); setSpikeOpen(false); setConfirmReset(true)
+  }, [])
+  const toggleHelp = useCallback(() => {
+    setHelpOpen((h) => !h); setSpikeOpen(false); setConfirmReset(false)
+  }, [])
 
   // Keyboard shortcuts (never while typing in a form control).
   const handled = useRef(false)
@@ -114,9 +124,9 @@ export default function App() {
         else if (!clock.at_end) play()
       } else if (action === 'step') {
         if (!clock.playing && !clock.at_end) step()
-      } else if (action === 'reset') setConfirmReset(true)
+      } else if (action === 'reset') askReset()
       else if (action === 'spike') openSpike()
-      else if (action === 'help') setHelpOpen((h) => !h)
+      else if (action === 'help') toggleHelp()
     }
     // A focused button would also "click" on Space keyup; swallow it when we handled the key.
     const onKeyUp = (e: KeyboardEvent) => {
@@ -128,7 +138,7 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [clock, play, pause, step, openSpike])
+  }, [clock, play, pause, step, openSpike, askReset, toggleHelp])
 
   const onZoneClick = (zip: string) => (spikeOpen ? setSpikeZone(zip) : setSelected(zip))
   const spikeSlot = spikeOpen ? (
@@ -143,9 +153,9 @@ export default function App() {
               baseMode={mode} showLog={showLog} theme={theme.pref} spikeSlot={spikeSlot}
               onTheme={theme.setPref} onCycleTheme={theme.cycle}
               onSpeed={onSpeed} onPlay={play} onPause={pause} onStep={step}
-              onAskReset={() => setConfirmReset(true)} onConfirmReset={doReset}
+              onAskReset={askReset} onConfirmReset={doReset}
               onCancelReset={() => setConfirmReset(false)} onSpike={openSpike} onRunDemo={runDemo}
-              onToggleHelp={() => { setHelpOpen((h) => !h); setSpikeOpen(false) }}
+              onToggleHelp={toggleHelp} onClosePanels={closePanels}
               onBaseMode={(m) => { setMode(m); setFellBack(false) }} onShowLog={setShowLog} />
       <main className="main">
         <div className="cell-map">
