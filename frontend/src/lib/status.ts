@@ -1,4 +1,4 @@
-import type { Priority, Status } from '../api/types'
+import type { Status } from '../api/types'
 
 // Fixed status palette (dataviz reference); always paired with a text label.
 export const STATUS_META: Record<Status, { label: string; color: string; ink: string; order: number }> = {
@@ -9,12 +9,6 @@ export const STATUS_META: Record<Status, { label: string; color: string; ink: st
 }
 
 export const STATUSES: Status[] = ['CRITICAL', 'ELEVATED', 'SAFE', 'INSUFFICIENT_DATA']
-
-export const PRIORITY_META: Record<Priority, { label: string; color: string; ink: string }> = {
-  immediate: { label: 'Immediate', color: '#d03b3b', ink: '#ffffff' },
-  '24h': { label: '24h', color: '#fab219', ink: '#1a1a1a' },
-  '72h': { label: '72h', color: '#475569', ink: '#ffffff' },
-}
 
 export const ACCENT = '#2a78d6'
 // CSS variables, so the chart follows the light/dark theme.

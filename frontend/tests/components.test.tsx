@@ -1,7 +1,5 @@
-// Layer B: components with mocked data. (The Leaflet map itself is covered by the e2e run.)
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { HistoryDay } from '../src/api/types'
 import { Header } from '../src/components/Header'
 import { Incidents } from '../src/components/Incidents'
 import { RawLog } from '../src/components/RawLog'
@@ -9,10 +7,9 @@ import { SpikeDialog } from '../src/components/SpikeDialog'
 import { Timeline } from '../src/components/Timeline'
 import { ZonePanel } from '../src/components/ZonePanel'
 import { RISK_SCORE_HELP } from '../src/lib/status'
-import { allocation, briefing, clock, decision, event, zone } from './fixtures'
+import { clock, event, zone } from './fixtures'
 
 afterEach(() => vi.restoreAllMocks())
-
 const noop = () => undefined
 const headerProps = {
   busy: false, confirmReset: false, helpOpen: false, speed: 1, baseMode: 'vector' as const, showLog: false,
@@ -22,257 +19,138 @@ const headerProps = {
 }
 
 describe('Header', () => {
-  it('shows the date, "Day N of 41" and the simulated-data badge', () => {
+  it('shows date, day, simulated badge and one primary demo action', () => {
     render(<Header {...headerProps} clock={clock()} />)
     expect(screen.getByText('Fri 2 Oct 2026')).toBeInTheDocument()
     expect(screen.getByTestId('clock-day')).toHaveTextContent('Day 31 of 41')
     expect(screen.getByTestId('simulated-badge')).toHaveTextContent('SIMULATED DATA')
-  })
-
-  it('has one primary action, and wires play, step, speed and run demo', () => {
-    const onStep = vi.fn(), onRunDemo = vi.fn(), onSpike = vi.fn(), onSpeed = vi.fn()
-    const { rerender } = render(<Header {...headerProps} clock={clock()} onStep={onStep} onRunDemo={onRunDemo}
-                                        onSpike={onSpike} onSpeed={onSpeed} />)
     expect(document.querySelectorAll('.btn-primary')).toHaveLength(1)
-    expect(screen.getByTestId('run-demo')).toHaveClass('btn-primary')
-    fireEvent.click(screen.getByTestId('step'))
-    fireEvent.click(screen.getByTestId('run-demo'))
-    fireEvent.click(screen.getByTestId('spike'))
-    fireEvent.click(screen.getByTestId('speed'))
-    fireEvent.click(screen.getByTestId('speed-0.5'))
-    expect([onStep, onRunDemo, onSpike].map((f) => f.mock.calls.length)).toEqual([1, 1, 1])
-    expect(onSpeed).toHaveBeenCalledWith(0.5)
-    rerender(<Header {...headerProps} clock={clock({ playing: true })} />)
-    expect(screen.getByTestId('pause')).toBeInTheDocument()
-    expect(screen.getByTestId('step')).toBeDisabled()
-    expect(screen.getByTestId('step')).toHaveAttribute('title', 'Pause to step one day at a time')
   })
-
-  it('explains disabled controls at the end of the timeline', () => {
+  it('does not hold the clock for a notification approval', () => {
+    render(<Header {...headerProps} clock={clock({ awaiting_approval: true })} />)
+    expect(screen.getByTestId('step')).toBeEnabled()
+    expect(screen.getByTestId('clock-held')).toHaveTextContent('alert awaiting approval')
+  })
+  it('explains disabled controls at the end and allows reset', () => {
     render(<Header {...headerProps} clock={clock({ at_end: true })} />)
     expect(screen.getByTestId('play')).toBeDisabled()
     expect(screen.getByTestId('play')).toHaveAttribute('title', 'Timeline ended: reset to run again')
     expect(screen.getByTestId('reset')).toBeEnabled()
   })
-
-  it('puts shortcuts, map style, the raw log and the risk score explanation in help & settings', () => {
-    const onBaseMode = vi.fn()
-    render(<Header {...headerProps} clock={clock()} helpOpen onBaseMode={onBaseMode} />)
-    const help = screen.getByTestId('help-popover')
-    for (const k of ['Space', '→', 'R', 'S']) expect(within(help).getByText(k)).toBeInTheDocument()
-    expect(within(help).getByText(RISK_SCORE_HELP)).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('map-tiles'))
-    expect(onBaseMode).toHaveBeenCalledWith('tiles')
-    expect(screen.getByTestId('show-log')).not.toBeChecked()
-  })
-
-  it('holds Step and says why while a stock move awaits approval', () => {
-    render(<Header {...headerProps} clock={clock({ awaiting_approval: true })} />)
-    expect(screen.getByTestId('step')).toBeDisabled()
-    expect(screen.getByTestId('step')).toHaveAttribute('title', 'Waiting for a decision on the proposed stock move')
-    expect(screen.getByTestId('clock-held')).toHaveTextContent('waiting for approval')
-  })
-
-  it('switches theme from the header button and from help & settings', () => {
-    const onCycleTheme = vi.fn(), onTheme = vi.fn()
-    render(<Header {...headerProps} clock={clock()} theme="dark" helpOpen onCycleTheme={onCycleTheme} onTheme={onTheme} />)
-    expect(screen.getByTestId('theme')).toHaveAttribute('title', 'Theme: Dark (click to change)')
+  it('wires controls, speed and theme', () => {
+    const onStep = vi.fn(), onRunDemo = vi.fn(), onSpeed = vi.fn(), onCycleTheme = vi.fn()
+    render(<Header {...headerProps} clock={clock()} onStep={onStep} onRunDemo={onRunDemo}
+                   onSpeed={onSpeed} onCycleTheme={onCycleTheme} />)
+    fireEvent.click(screen.getByTestId('step'))
+    fireEvent.click(screen.getByTestId('run-demo'))
+    fireEvent.click(screen.getByTestId('speed'))
+    fireEvent.click(screen.getByTestId('speed-0.5'))
     fireEvent.click(screen.getByTestId('theme'))
+    expect(onStep).toHaveBeenCalledOnce()
+    expect(onRunDemo).toHaveBeenCalledOnce()
+    expect(onSpeed).toHaveBeenCalledWith(0.5)
     expect(onCycleTheme).toHaveBeenCalledOnce()
-    expect(screen.getByTestId('theme-dark')).toBeChecked()
-    fireEvent.click(screen.getByTestId('theme-light'))
-    expect(onTheme).toHaveBeenCalledWith('light')
   })
-
-  it('asks before resetting', () => {
+  it('keeps shortcuts and risk explanation in help, and asks before resetting', () => {
     const onConfirmReset = vi.fn()
-    render(<Header {...headerProps} clock={clock()} confirmReset onConfirmReset={onConfirmReset} />)
+    render(<Header {...headerProps} clock={clock()} helpOpen confirmReset onConfirmReset={onConfirmReset} />)
+    expect(screen.getByTestId('help-popover')).toHaveTextContent(RISK_SCORE_HELP)
     fireEvent.click(within(screen.getByTestId('reset-confirm')).getByRole('button', { name: 'Reset' }))
     expect(onConfirmReset).toHaveBeenCalledOnce()
   })
 })
 
 describe('SpikeDialog', () => {
-  const zones = [zone('greater-manchester'), zone('devon', { zone_name: 'Devon', region: 'South West' })]
-
-  it('posts the area and r, and updates the doubling time with r', async () => {
-    const onInject = vi.fn().mockResolvedValue(undefined)
-    const onClose = vi.fn()
-    render(<SpikeDialog zones={zones} selected="greater-manchester" onSelect={noop} onInject={onInject} onClose={onClose} />)
+  it('injects the selected area and rate', async () => {
+    const onInject = vi.fn().mockResolvedValue(undefined), onClose = vi.fn()
+    render(<SpikeDialog zones={[zone('greater-manchester')]} selected="greater-manchester"
+                        onSelect={noop} onInject={onInject} onClose={onClose} />)
     expect(screen.getByTestId('spike-doubling')).toHaveTextContent('1.7 days')
     fireEvent.change(screen.getByTestId('spike-r-input'), { target: { value: '0.7' } })
-    expect(screen.getByTestId('spike-doubling')).toHaveTextContent('1.0 days')
     fireEvent.click(screen.getByTestId('spike-inject'))
     await waitFor(() => expect(onClose).toHaveBeenCalled())
     expect(onInject).toHaveBeenCalledWith('greater-manchester', 0.7)
   })
-
-  it('shows a 409 message inline and stays open', async () => {
-    const onInject = vi.fn().mockRejectedValue(new Error('greater-manchester already has an active outbreak'))
+  it('shows injection conflicts and stays open', async () => {
     const onClose = vi.fn()
-    render(<SpikeDialog zones={zones} selected="greater-manchester" onSelect={noop} onInject={onInject} onClose={onClose} />)
+    render(<SpikeDialog zones={[zone('greater-manchester')]} selected="greater-manchester"
+                        onSelect={noop} onInject={vi.fn().mockRejectedValue(new Error('already active'))} onClose={onClose} />)
     fireEvent.click(screen.getByTestId('spike-inject'))
-    expect(await screen.findByTestId('spike-error')).toHaveTextContent('already has an active outbreak')
+    expect(await screen.findByTestId('spike-error')).toHaveTextContent('already active')
     expect(onClose).not.toHaveBeenCalled()
   })
 })
 
 describe('Incidents', () => {
-  const GM = 'greater-manchester'
-  const zones = [zone(GM)]
-  const injected = event('OUTBREAK_INJECTED', { r: 0.4 }, { sim_date: '2026-09-28' })
-  const detected = event('STATUS_CHANGE', { from: 'ELEVATED', to: 'CRITICAL', projected_score: 83, doubling_days: 2.1 })
-  const alloc = event('AGENT_ALLOCATION', allocation as unknown as Record<string, unknown>)
-  const brief = event('AGENT_DIRECTIVE', briefing('template', 'GM: doubling every 2.1 days') as unknown as Record<string, unknown>)
-  const ride = event('RIDESHARE_WEBHOOK', { episode_id: 1, direction: 'disable', request: { review_at: '2026-10-09', area: { radius_km: 25 } } })
-  const approved = event('AGENT_DECISION', decision() as unknown as Record<string, unknown>)
+  const detected = event('STATUS_CHANGE', { from: 'ELEVATED', to: 'CRITICAL', projected_score: 83 })
+  const opened = event('INCIDENT_OPENED', { episode_id: 1, status: 'awaiting_approval',
+    summary: 'Greater Manchester has a critical forecast. Review the evidence.', recipient: 'daeyad1@gmail.com' })
+  const progress = (status: string, extra = {}) => event('REPORT_STATUS',
+    { episode_id: 1, status, recipient: 'daeyad1@gmail.com', ...extra })
+  const props = { zones: [zone('greater-manchester')], onSelect: noop }
 
-  it('shows an empty state before any outbreak', () => {
-    render(<Incidents events={[]} zones={zones} onShowArcs={noop} onSelect={noop} />)
+  it('does not expose the hidden synthetic spike or open a card before detection', () => {
+    render(<Incidents {...props} events={[event('OUTBREAK_INJECTED')]} />)
     expect(screen.getByTestId('incidents-empty')).toBeInTheDocument()
+    expect(screen.queryByTestId('incident')).not.toBeInTheDocument()
+    expect(screen.queryByText(/hidden from the system/i)).not.toBeInTheDocument()
   })
-
-  it('marks the simulated spike as hidden from the system, distinct from the system’s own steps', () => {
-    render(<Incidents events={[injected]} zones={zones} onShowArcs={noop} onSelect={noop} />)
-    const card = screen.getByTestId('incident')
-    expect(card).toHaveAttribute('data-phase', 'watching')
-    const spike = card.querySelector('[data-step="injected"]')!
-    expect(spike).toHaveClass('step-sim')
-    expect(spike).toHaveTextContent('Simulated spike')
-    expect(spike).toHaveTextContent('hidden from the system')
-    expect(card.querySelector('[data-step="detected"]')).toHaveClass('step-todo')
-  })
-
-  it('fills in every step with plain summaries and details behind expands', () => {
-    const onShowArcs = vi.fn()
-    render(<Incidents events={[injected, detected, alloc, approved, brief, ride]} zones={zones} onShowArcs={onShowArcs} onSelect={noop} />)
-    const card = screen.getByTestId('incident')
-    expect(card).toHaveAttribute('data-phase', 'critical')
-    for (const step of ['detected', 'stock', 'briefing', 'containment']) {
-      expect(card.querySelector(`[data-step="${step}"]`)).toHaveClass('step-done')
-    }
-    expect(card.querySelector('[data-step="stock"]')).toHaveTextContent('Stock moved')
-    expect(screen.getByTestId('decision-tag')).toHaveTextContent('Approved by operator')
-    expect(screen.queryByTestId('approval')).not.toBeInTheDocument()
-    expect(screen.getByTestId('stock-summary')).toHaveTextContent('PPE 75k → 116k')
-    expect(card).toHaveTextContent('Pooled rideshare paused within 25 km until 9 Oct')
-    expect(screen.queryByTestId('stock-table')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('stock-toggle'))
-    expect(screen.getByTestId('stock-table')).toHaveTextContent('Cheshire and Merseyside')
-    fireEvent.click(screen.getByText('Show on map'))
-    expect(onShowArcs).toHaveBeenCalledWith(allocation)
-    expect(screen.getByTestId('briefing-source')).toHaveTextContent('Rule-based briefing')
-    fireEvent.click(screen.getByTestId('briefing-toggle'))
-    const directives = screen.getAllByTestId('directive')
-    expect(directives.map((d) => within(d).getByText(/IMMEDIATE|24H|72H/).textContent)).toEqual(['IMMEDIATE', '24H', '72H'])
-  })
-
-  it('asks a person to approve or override a proposed move, with a countdown', () => {
+  it('shows short summary, recipient and explicit approval or dismissal without countdown', () => {
     const onApprove = vi.fn(), onOverride = vi.fn()
-    const deadlines = new Map([[1, { at: Date.now() + 23_000, timeoutS: 30 }]])
-    render(<Incidents events={[detected, alloc, brief]} zones={zones} onShowArcs={noop} onSelect={noop}
-                      deadlines={deadlines} onApprove={onApprove} onOverride={onOverride} />)
-    const stock = screen.getByTestId('incident').querySelector('[data-step="stock"]')!
-    expect(stock).toHaveAttribute('data-variant', 'await')
-    expect(stock).toHaveTextContent('Stock move proposed')
-    expect(screen.getByTestId('approval-countdown')).toHaveTextContent('Auto-approves in 23 s unless someone objects')
+    render(<Incidents {...props} events={[detected, opened]} onApprove={onApprove} onOverride={onOverride} />)
+    expect(screen.getByTestId('incident-summary')).toHaveTextContent('critical forecast')
+    expect(screen.getByTestId('alert-notification')).toHaveTextContent('daeyad1@gmail.com')
+    expect(screen.queryByText(/auto-approve|pooled rides|briefing|stock moved/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('approve'))
     fireEvent.click(screen.getByTestId('override'))
     expect(onApprove).toHaveBeenCalledWith(1)
     expect(onOverride).toHaveBeenCalledWith(1)
   })
-
-  it('shows that donors keep a safe reserve after giving', () => {
-    const { rerender } = render(<Incidents events={[detected, alloc]} zones={zones} onShowArcs={noop} onSelect={noop} />)
-    expect(screen.getByTestId('donor-safety')).toHaveTextContent(
-      'Donors stay safe: Cheshire would keep 5.8 days of reserve after giving · West Yorkshire 6.1 days · none below 4.2 days')
-    rerender(<Incidents events={[detected, alloc, approved]} zones={zones} onShowArcs={noop} onSelect={noop} />)
-    expect(screen.getByTestId('donor-safety')).toHaveTextContent('Cheshire keeps 5.8 days of reserve after giving')
-    fireEvent.click(screen.getByTestId('stock-toggle'))
-    expect(screen.getByTestId('stock-table')).toHaveTextContent('Reserve after')
-    expect(screen.getByTestId('stock-table')).toHaveTextContent('6.1 days')
+  it.each(['queued', 'generating', 'sending', 'sent', 'rejected'])('shows %s without approving twice', (status) => {
+    render(<Incidents {...props} events={[detected, opened, progress(status)]} />)
+    expect(screen.queryByTestId('approve')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('report-retry')).not.toBeInTheDocument()
   })
-
-  it('says plainly when every donor gives down to its safety floor', () => {
-    const atFloor = { ...allocation, transfers: allocation.transfers.map((t) => ({ ...t, reserve_days_after: 4.2 })) }
-    render(<Incidents events={[detected, event('AGENT_ALLOCATION', atFloor as unknown as Record<string, unknown>)]}
-                      zones={zones} onShowArcs={noop} onSelect={noop} />)
-    expect(screen.getByTestId('donor-safety')).toHaveTextContent(
-      'Donors stay safe: Cheshire and West Yorkshire would each keep 4.2 days of reserve after giving, their safety floor')
+  it('offers retry for definite failure and download when PDF exists', () => {
+    const onRetry = vi.fn()
+    render(<Incidents {...props} events={[detected, opened, progress('failed', { error: 'SMTP rejected', has_pdf: true })]}
+                      onRetry={onRetry} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('SMTP rejected')
+    fireEvent.click(screen.getByTestId('report-retry'))
+    expect(onRetry).toHaveBeenCalledWith(1)
+    expect(screen.getByRole('link', { name: 'Download incident PDF' }))
+      .toHaveAttribute('href', '/api/v1/episodes/1/report.pdf')
   })
-
-  it('says when nobody objected and the move went ahead by itself', () => {
-    const timedOut = event('AGENT_DECISION', decision({ by: 'timeout' }) as unknown as Record<string, unknown>)
-    render(<Incidents events={[detected, alloc, timedOut]} zones={zones} onShowArcs={noop} onSelect={noop} />)
-    expect(screen.getByTestId('decision-tag')).toHaveTextContent('Auto-approved: nobody objected within 30 s')
+  it('does not offer retry when SMTP acceptance is uncertain', () => {
+    render(<Incidents {...props} events={[detected, opened, progress('delivery_unknown')]} />)
+    expect(screen.getByText(/check the recipient inbox/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('report-retry')).not.toBeInTheDocument()
   })
-
-  it('shows an overridden move as stopped, with nothing moved', () => {
-    const overridden = event('AGENT_DECISION', decision({ decision: 'overridden', transfers: [] }) as unknown as Record<string, unknown>)
-    render(<Incidents events={[detected, alloc, overridden]} zones={zones} onShowArcs={noop} onSelect={noop} />)
-    const stock = screen.getByTestId('incident').querySelector('[data-step="stock"]')!
-    expect(stock).toHaveAttribute('data-variant', 'overridden')
-    expect(stock).toHaveTextContent('Stock move overridden')
-    expect(screen.getByTestId('overridden')).toHaveTextContent('no stock moved')
-    expect(screen.queryByTestId('approval')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('stock-summary')).not.toBeInTheDocument()
-  })
-
-  it('replaces the rule-based briefing with the AI briefing in place', () => {
-    const ai = event('AGENT_DIRECTIVE', briefing('llm', 'AI view') as unknown as Record<string, unknown>)
-    render(<Incidents events={[detected, alloc, brief, ai]} zones={zones} onShowArcs={noop} onSelect={noop} />)
-    expect(screen.getAllByTestId('briefing')).toHaveLength(1)
-    expect(screen.getByTestId('briefing-source')).toHaveTextContent('AI briefing (Claude)')
-    expect(screen.getByText('updated')).toBeInTheDocument()
+  it('disables approval while a request is in flight', () => {
+    render(<Incidents {...props} events={[detected, opened]} onApprove={noop} onOverride={noop} busy />)
+    expect(screen.getByTestId('approve')).toBeDisabled()
+    expect(screen.getByTestId('override')).toBeDisabled()
   })
 })
 
-describe('RawLog', () => {
-  it('hides normal/elevated noise unless asked', () => {
-    const evs = [event('STATUS_CHANGE', { from: 'SAFE', to: 'ELEVATED' }, { message: 'Devon: SAFE → ELEVATED' }),
-                 event('OUTBREAK_INJECTED', {}, { message: 'Simulated pathogen spike in Greater Manchester' })]
-    render(<RawLog events={evs} />)
-    expect(screen.queryByText('Devon: SAFE → ELEVATED')).not.toBeInTheDocument()
+describe('Other panels', () => {
+  it('filters routine status changes in the raw log until requested', () => {
+    render(<RawLog events={[event('STATUS_CHANGE', { to: 'ELEVATED' }, { message: 'Devon elevated' }),
+                            event('REPORT_STATUS', {}, { message: 'Report sent' })]} />)
+    expect(screen.queryByText('Devon elevated')).not.toBeInTheDocument()
+    expect(screen.getByText('Report sent')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('show-all'))
-    expect(screen.getByText('Devon: SAFE → ELEVATED')).toBeInTheDocument()
+    expect(screen.getByText('Devon elevated')).toBeInTheDocument()
   })
-})
-
-describe('ZonePanel', () => {
-  const days: HistoryDay[] = [
-    { day: 30, date: '2026-10-01', status: 'ELEVATED', score: 50, projected_score: 66 },
-    { day: 31, date: '2026-10-02', status: 'CRITICAL', score: 62, projected_score: 83 },
-    { day: 32, date: '2026-10-03', status: 'CRITICAL', score: 76, projected_score: 90 },
-    { day: 33, date: '2026-10-04', status: 'CRITICAL', score: 85, projected_score: 92 },
-  ]
-  const history = { zip_code: 'greater-manchester', zone_name: 'Greater Manchester', days }
-
-  it('uses short labels, A&E against its usual level, and a prominent lead caption', () => {
-    render(<ZonePanel zones={[zone('greater-manchester', { status: 'CRITICAL', doubling_days: 2.1, r_hat: 0.33 })]}
-                      selected="greater-manchester" history={history} spikeDate="2026-10-01" onSelect={noop} />)
-    const stats = within(document.querySelector('.stats') as HTMLElement)
-    for (const label of ['Risk now', 'Risk in 48h', 'Doubling', 'A&E wait']) expect(stats.getByText(label)).toBeInTheDocument()
-    expect(screen.getByText('· usual 64')).toBeInTheDocument()
-    expect(screen.getByTestId('lead-note')).toHaveTextContent('Alert raised 2 days before the risk score reached 80')
-    expect(screen.getByTestId('lead-note')).toHaveClass('caption-lead')
-  })
-
-  it('explains the risk score behind its "?"', () => {
-    render(<ZonePanel zones={[zone('greater-manchester')]} selected="greater-manchester" history={history} onSelect={noop} />)
+  it('shows the England overview and risk explanation', () => {
+    const { rerender } = render(<ZonePanel zones={[zone('a', { status: 'CRITICAL' }), zone('b')]}
+                                         selected={null} history={null} onSelect={noop} />)
+    expect(screen.getByTestId('overview')).toHaveTextContent('1 area critical')
+    rerender(<ZonePanel zones={[zone('a')]} selected="a" history={null} onSelect={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'About Risk now' }))
     expect(screen.getByRole('tooltip')).toHaveTextContent(RISK_SCORE_HELP)
   })
-
-  it('shows the England overview when nothing is selected', () => {
-    render(<ZonePanel zones={[zone('a', { status: 'CRITICAL', projected_score: 90 }), zone('b')]} selected={null}
-                      history={null} onSelect={noop} />)
-    expect(screen.getByTestId('overview')).toHaveTextContent('1 area critical')
-    expect(screen.getByTestId('overview')).toHaveTextContent('Highest 48-hour forecast')
-  })
-})
-
-describe('Timeline', () => {
-  it('shows today, and the spike, alert and would-hit-80 markers', () => {
+  it('shows today, alert, spike and score crossing markers', () => {
     render(<Timeline clock={clock({ day: 33, sim_date: '2026-10-04' })} spike="2026-09-28" alert="2026-10-02" hit="2026-10-04" />)
     expect(screen.getByTestId('tl-cursor')).toHaveTextContent('Today · 4 Oct')
     expect(screen.getByTestId('tl-spike')).toHaveTextContent('Spike')

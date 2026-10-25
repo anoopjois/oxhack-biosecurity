@@ -14,11 +14,10 @@ Invariants:
     I1  An injected outbreak starts at the current day (multiplier 1 there), so only
         later days change; ingested telemetry is never rewritten.
     I2  State is a function of (seed, ordered actions log); `apply_actions` replays it.
-        Approval decisions (operator or timeout) are logged actions too.
+        Operator decisions are logged actions too. Replaying them never sends email.
 
-Approvals: a CRITICAL entry only proposes its stock move. While any proposal is pending the
-clock is held (step raises AwaitingApproval); `decide` settles one, and `expire_due`
-auto-approves those nobody objected to within the timeout (wall clock, driven by main.py).
+Approvals: every CRITICAL entry creates an incident. Only an explicit operator approval
+generates and emails a report. Pending approvals never block the simulation clock.
 """
 
 import json
@@ -33,8 +32,7 @@ import pandas as pd
 
 from backend import config, db
 from backend.agent.executor import Agent
-from backend.agent.llm import DirectiveWriter, LLMOutcome, make_writer
-from backend.agent.rideshare import MockRideshare, RideshareClient
+from backend.agent.reporting import ReportService
 from backend.inventory import seed_inventory
 from engine.generator import SyntheticData, generate, inject_outbreak
 from engine.preprocess import VALUE_COLUMNS, to_daily
@@ -56,10 +54,6 @@ class Conflict(SimulationError):
 
 class Invalid(SimulationError):
     status_code = 422
-
-
-class AwaitingApproval(Conflict):
-    """The clock is held until every proposed stock move is approved or overridden."""
 
 
 DECISIONS = {"approve": "approved", "override": "overridden"}
@@ -84,8 +78,6 @@ class StepResult:
 
 TransitionListener = Callable[[list[Transition]], None]
 
-DEFAULT_WRITER = object()  # sentinel: build a Claude writer from config (None if no API key)
-
 SEVERITY_BY_NEW_STATUS = {Status.CRITICAL.value: "critical", Status.ELEVATED.value: "warning"}
 ZONE_RESULT_FIELDS = ["status", "score", "projected_score", "z_W", "z_E", "r_hat", "se_r",
                       "doubling_days", "er_baseline", "baseline_frozen"]
@@ -105,10 +97,9 @@ def _now() -> str:
 
 
 class Simulation:
-    def __init__(self, settings: config.Settings, directive_writer=DEFAULT_WRITER,
-                 rideshare: RideshareClient | None = None):
+    def __init__(self, settings: config.Settings, report_service: ReportService | None = None):
         self.settings = settings
-        self.generation = 0   # bumped on reset; late LLM results from an older run are discarded
+        self.generation = 0   # bumped on reset; stale report jobs are discarded before dispatch
         self._closed = False
         self.lock = threading.Lock()
         self._listeners: list[TransitionListener] = []
@@ -120,10 +111,7 @@ class Simulation:
         self.playing = False
         self.seconds_per_day = settings.seconds_per_day
         self.seed = settings.seed
-        writer: DirectiveWriter | None = make_writer() if directive_writer is DEFAULT_WRITER else directive_writer
-        self.agent = Agent(self.zones, rideshare or MockRideshare(), writer, self.attach_llm_result,
-                           settings.approval_timeout_s)
-        self._deadlines: dict[int, tuple[str, float]] = {}  # pending episode -> (zone, monotonic deadline)
+        self.agent = Agent(self.zones, report_service or ReportService(), self)
 
         self.conn = db.connect(settings.db_path)
         db.init_schema(self.conn)
@@ -155,7 +143,8 @@ class Simulation:
 
     @property
     def awaiting_approval(self) -> bool:
-        return bool(self._deadlines)
+        return bool(self.conn.execute(
+            "SELECT 1 FROM agent_episodes WHERE decision = 'pending' LIMIT 1").fetchone())
 
     def clock(self) -> dict:
         return {
@@ -168,16 +157,14 @@ class Simulation:
             "at_end": self.at_end,
             "seed": self.seed,
             "run": self.generation,  # changes on every reset; the frontend clears its caches
-            "awaiting_approval": self.awaiting_approval,  # the clock is held for a decision
+            "awaiting_approval": self.awaiting_approval,
         }
 
     def _approvals(self) -> list[dict]:
-        """Pending stock moves with the seconds left before they auto-approve."""
-        now = time.monotonic()
-        return [{"episode_id": episode_id, "zip_code": zip_code,
-                 "seconds_left": round(max(0.0, deadline - now), 1),
-                 "timeout_s": self.settings.approval_timeout_s}
-                for episode_id, (zip_code, deadline) in sorted(self._deadlines.items())]
+        """Notifications always require a person; there is no timeout."""
+        return [dict(row) for row in self.conn.execute(
+            "SELECT episode_id, zip_code, recipient FROM agent_episodes "
+            "WHERE decision = 'pending' ORDER BY episode_id")]
 
     def add_transition_listener(self, listener: TransitionListener) -> None:
         """Called with each tick's transitions, after commit and outside the lock."""
@@ -284,7 +271,6 @@ class Simulation:
             data = generate(self.zones["zip_code"].tolist(), self.n_days,
                             self.settings.start_date, seed)
             self.generation += 1
-            self._deadlines = {}
             with self.conn:
                 db.clear_for_reset(self.conn)
                 self.data, self.seed, self.current_day, self.playing = data, seed, self.start_day, False
@@ -303,8 +289,6 @@ class Simulation:
         with self.lock:
             if self.at_end:
                 raise Conflict("already at the last simulated day")
-            if self.awaiting_approval:
-                raise AwaitingApproval("waiting for a decision on a proposed stock move")
             day = self.current_day + 1
             transitions: list[Transition] = []
             with self.conn:
@@ -322,8 +306,7 @@ class Simulation:
                              "se_r": new["se_r"], "doubling_days": new["doubling_days"]})
                         transitions.append(Transition(zip_code, old_status, new["status"], day,
                                                       event["event_id"], new))
-                # The agent's deterministic part: allocation, transfers, events (same transaction).
-                jobs = self.agent.handle_transitions(self, day, transitions, results)
+                self.agent.handle_transitions(self, day, transitions, results)
                 self._write_statuses(day, results)
                 if day >= self.last_day:
                     self._add_event(day, "TIMELINE_END", "info", None,
@@ -331,73 +314,95 @@ class Simulation:
                 self._log_action(day, "step", {"source": source})
             # Commit succeeded: only now update in-memory state.
             self.current_day, self._results = day, results
-            deadline = time.monotonic() + self.settings.approval_timeout_s
-            for row in self.conn.execute("SELECT episode_id, zip_code FROM agent_episodes "
-                                         "WHERE decision = 'pending'"):
-                self._deadlines.setdefault(row["episode_id"], (row["zip_code"], deadline))
             if self.at_end:
                 self.playing = False
             self._build_snapshot()
             clock = self.clock()
-            generation = self.generation
-        self.agent.submit(jobs, generation)  # LLM briefings run in the background
         for listener in self._listeners:
             listener(transitions)
         return StepResult(clock=clock, tick_ms=(time.perf_counter() - t0) * 1000,
                           transitions=transitions)
 
-    def attach_llm_result(self, episode_id: int, generation: int, outcome: LLMOutcome) -> None:
-        """Called from an LLM worker thread: attach the AI briefing to its episode, if still current."""
+    def report_progress(self, episode_id: int, generation: int, status: str,
+                        error: str | None = None, pdf: bytes | None = None) -> bool:
+        """Persist worker progress. A reset cancels work not yet handed to SMTP."""
         with self.lock:
             if self._closed or generation != self.generation:
-                return  # a reset (or shutdown) happened since this job was queued
-            row = self.conn.execute("SELECT zip_code FROM agent_episodes WHERE episode_id = ?",
+                return False
+            row = self.conn.execute("SELECT * FROM agent_episodes WHERE episode_id = ?",
                                     (episode_id,)).fetchone()
-            if row is None:
-                return
+            if row is None or row["decision"] != "approved":
+                return False
             with self.conn:
-                if outcome.status == "done":
-                    message, payload = self.agent.llm_event(episode_id, row["zip_code"], outcome)
-                    self._add_event(self.current_day, "AGENT_DIRECTIVE", "warning", row["zip_code"],
-                                    message, payload)
-                    self.conn.execute(
-                        "UPDATE agent_episodes SET llm_status = 'done', directive_source = 'llm' "
-                        "WHERE episode_id = ?", (episode_id,))
-                else:
-                    self.conn.execute("UPDATE agent_episodes SET llm_status = ? WHERE episode_id = ?",
-                                      (outcome.status, episode_id))
+                self.conn.execute(
+                    "UPDATE agent_episodes SET report_status = ?, report_error = ?, "
+                    "report_pdf = COALESCE(?, report_pdf), report_model = ? WHERE episode_id = ?",
+                    (status, error, pdf, self.agent.service.settings.model, episode_id))
+                payload = {"episode_id": episode_id, "status": status, "recipient": row["recipient"],
+                           "error": error, "has_pdf": pdf is not None or row["report_pdf"] is not None}
+                self._add_event(self.current_day, "REPORT_STATUS",
+                                "warning" if error else "info", row["zip_code"],
+                                f"Incident report {status}: {error or row['recipient']}", payload)
+            return True
 
-    def decide(self, episode_id: int, decision: str, by: str = "operator") -> dict:
-        """Approve or override a pending stock move (decision: approve | override)."""
+    def decide(self, episode_id: int, decision: str, *, dispatch: bool = True) -> dict:
+        """Explicit approval generates and emails a report; override sends nothing."""
         with self.lock:
             if decision not in DECISIONS:
                 raise Invalid(f"decision must be one of {sorted(DECISIONS)}")
-            row = self.conn.execute("SELECT decision FROM agent_episodes WHERE episode_id = ?",
+            row = self.conn.execute("SELECT * FROM agent_episodes WHERE episode_id = ?",
                                     (episode_id,)).fetchone()
             if row is None:
                 raise NotFound(f"unknown episode: {episode_id}")
             if row["decision"] != "pending":
                 raise Conflict(f"episode {episode_id} was already {row['decision']}")
+            status = "queued" if decision == "approve" else "rejected"
             with self.conn:
-                event = self.agent.decide(self, self.current_day, episode_id, DECISIONS[decision], by)
-                self._log_action(self.current_day, "decide_allocation",
-                                 {"episode_id": episode_id, "decision": decision, "by": by})
-            self._deadlines.pop(episode_id, None)
-            return {"event": event, "clock": self.clock()}
+                self.conn.execute("UPDATE agent_episodes SET decision = ?, decided_by = 'operator', "
+                                  "decided_date = ?, report_status = ? WHERE episode_id = ?",
+                                  (DECISIONS[decision], self.iso(self.current_day), status, episode_id))
+                event = self._add_event(
+                    self.current_day, "INCIDENT_DECISION", "info", row["zip_code"],
+                    f"Operator {DECISIONS[decision]} incident notification to {row['recipient']}",
+                    {"episode_id": episode_id, "decision": DECISIONS[decision],
+                     "status": status, "recipient": row["recipient"]})
+                self._log_action(self.current_day, "decide_alert",
+                                 {"episode_id": episode_id, "decision": decision})
+            generation, clock = self.generation, self.clock()
+        if decision == "approve" and dispatch:
+            self.agent.submit(episode_id, generation, json.loads(row["context"]), row["report_pdf"])
+        return {"event": event, "clock": clock}
 
-    def expire_due(self, now: float | None = None) -> list[int]:
-        """Auto-approve every pending move whose deadline has passed. Returns their episode ids."""
-        now = time.monotonic() if now is None else now
+    def retry_report(self, episode_id: int) -> dict:
+        """Retry definite failures only. Ambiguous SMTP delivery cannot be safely retried."""
         with self.lock:
-            due = [e for e, (_, deadline) in self._deadlines.items() if deadline <= now]
-        approved = []
-        for episode_id in sorted(due):
-            try:
-                self.decide(episode_id, "approve", by="timeout")
-                approved.append(episode_id)
-            except (Conflict, NotFound):
-                pass  # an operator decided (or a reset happened) in the meantime
-        return approved
+            row = self.conn.execute("SELECT * FROM agent_episodes WHERE episode_id = ?",
+                                    (episode_id,)).fetchone()
+            if row is None:
+                raise NotFound(f"unknown episode: {episode_id}")
+            if row["decision"] != "approved" or row["report_status"] != "failed":
+                raise Conflict("only a definitively failed approved report can be retried")
+            with self.conn:
+                self.conn.execute("UPDATE agent_episodes SET report_status = 'queued', report_error = NULL "
+                                  "WHERE episode_id = ?", (episode_id,))
+                event = self._add_event(self.current_day, "REPORT_STATUS", "info", row["zip_code"],
+                                        "Operator requested report retry",
+                                        {"episode_id": episode_id, "status": "queued",
+                                         "recipient": row["recipient"],
+                                         "has_pdf": row["report_pdf"] is not None})
+            generation, clock = self.generation, self.clock()
+        self.agent.submit(episode_id, generation, json.loads(row["context"]), row["report_pdf"])
+        return {"event": event, "clock": clock}
+
+    def report_pdf(self, episode_id: int) -> bytes:
+        with self.lock:
+            row = self.conn.execute("SELECT report_pdf FROM agent_episodes WHERE episode_id = ?",
+                                    (episode_id,)).fetchone()
+            if row is None:
+                raise NotFound(f"unknown episode: {episode_id}")
+            if row["report_pdf"] is None:
+                raise NotFound("PDF has not been generated yet")
+            return bytes(row["report_pdf"])
 
     def _transition_message(self, zip_code: str, old: str, new: dict) -> str:
         name = self.zone_names[zip_code]
@@ -467,7 +472,7 @@ class Simulation:
                 self.step(source=action["source"])
             elif action["kind"] == "trigger_outbreak":
                 self.trigger_outbreak(action["zone"], action["r"])
-            elif action["kind"] == "decide_allocation":
-                self.decide(action["episode_id"], action["decision"], action["by"])
+            elif action["kind"] == "decide_alert":
+                self.decide(action["episode_id"], action["decision"], dispatch=False)
             else:
                 raise ValueError(f"unknown action: {action['kind']}")

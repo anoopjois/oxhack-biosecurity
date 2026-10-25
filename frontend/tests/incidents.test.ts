@@ -1,71 +1,66 @@
 // Layer A: incident grouping, timeline markers and map label collisions.
 import { describe, expect, it } from 'vitest'
-import { buildIncidents, decisionOf, focusZip, phaseOf } from '../src/lib/incidents'
+import { buildIncidents, focusZip, phaseOf } from '../src/lib/incidents'
 import { CITIES, cityLabelBox, visibleCities } from '../src/lib/geo'
 import { labelSide, tickDays, timelineMarkers } from '../src/lib/timeline'
-import { allocation, briefing, event } from './fixtures'
+import { event } from './fixtures'
 
 const GM = 'greater-manchester'
 const DV = 'devon'
 const inject = (zip: string, date: string) => event('OUTBREAK_INJECTED', { r: 0.4, start_day: 27 }, { zip_code: zip, sim_date: date })
 const critical = (zip: string, date: string) => event('STATUS_CHANGE', { from: 'ELEVATED', to: 'CRITICAL', projected_score: 83, doubling_days: 2.1 }, { zip_code: zip, sim_date: date })
-const alloc = (zip: string, episode: number) => event('AGENT_ALLOCATION', { ...allocation, target: zip, episode_id: episode }, { zip_code: zip })
-const directive = (zip: string, episode: number, source: 'template' | 'llm') =>
-  event('AGENT_DIRECTIVE', { ...briefing(source, `${zip} ${source}`), episode_id: episode } as unknown as Record<string, unknown>, { zip_code: zip })
-const ride = (zip: string, episode: number, direction: 'disable' | 'enable') =>
-  event('RIDESHARE_WEBHOOK', { episode_id: episode, direction, request: { review_at: '2026-10-09', area: { radius_km: 25 } } }, { zip_code: zip })
-
-const decide = (zip: string, episode: number, decision: 'approved' | 'overridden') =>
-  event('AGENT_DECISION', { episode_id: episode, decision, by: 'operator', target: zip, transfers: [] }, { zip_code: zip })
+const opened = (zip: string, episode: number) => event('INCIDENT_OPENED',
+  { episode_id: episode, summary: 'Critical forecast', recipient: 'test@example.com', status: 'awaiting_approval' }, { zip_code: zip })
+const report = (zip: string, episode: number, status: string) =>
+  event('REPORT_STATUS', { episode_id: episode, status }, { zip_code: zip })
+const closed = (zip: string) => event('STATUS_CHANGE', { from: 'CRITICAL', to: 'ELEVATED' }, { zip_code: zip })
 
 describe('incidents', () => {
-  it('routes each approval decision to its own episode', () => {
+  it('routes interleaved report progress to the correct episode', () => {
     const incidents = buildIncidents([
-      critical(GM, '2026-10-02'), alloc(GM, 1), critical(DV, '2026-10-02'), alloc(DV, 2),
-      decide(DV, 2, 'overridden'), decide(GM, 1, 'approved'),
+      critical(GM, '2026-10-02'), opened(GM, 1), critical(DV, '2026-10-02'), opened(DV, 2),
+      report(DV, 2, 'failed'), report(GM, 1, 'sent'),
     ])
     const byZip = new Map(incidents.map((i) => [i.zip, i]))
-    expect(decisionOf(byZip.get(GM)!)?.decision).toBe('approved')
-    expect(decisionOf(byZip.get(DV)!)?.decision).toBe('overridden')
+    expect(byZip.get(GM)?.report?.status).toBe('sent')
+    expect(byZip.get(DV)?.report?.status).toBe('failed')
   })
 
-  it('grows one card through injected → detected → stock → briefing → containment', () => {
-    const steps = [inject(GM, '2026-09-28'), critical(GM, '2026-10-02'), alloc(GM, 1), directive(GM, 1, 'template'), ride(GM, 1, 'disable')]
-    expect(phaseOf(buildIncidents(steps.slice(0, 1))[0])).toBe('watching')
+  it('opens a card only when detected, never for synthetic injection', () => {
+    const steps = [inject(GM, '2026-09-28'), critical(GM, '2026-10-02'), opened(GM, 1)]
+    expect(buildIncidents(steps.slice(0, 1))).toEqual([])
     const [incident] = buildIncidents(steps)
     expect(incident.zip).toBe(GM)
-    expect([incident.injected, incident.detected, incident.allocation, incident.briefing, incident.containment].every(Boolean)).toBe(true)
+    expect(incident.detected).toBeDefined()
+    expect(incident.opened?.status).toBe('awaiting_approval')
     expect(phaseOf(incident)).toBe('critical')
   })
 
   it('keeps simultaneous outbreaks apart, even when their events interleave', () => {
     const events = [
       inject(GM, '2026-09-28'), inject(DV, '2026-09-28'),
-      critical(DV, '2026-10-01'), alloc(DV, 1), critical(GM, '2026-10-02'), directive(DV, 1, 'template'),
-      alloc(GM, 2), ride(DV, 1, 'disable'), directive(GM, 2, 'template'), ride(GM, 2, 'disable'),
+      critical(DV, '2026-10-01'), opened(DV, 1), critical(GM, '2026-10-02'),
+      opened(GM, 2), report(DV, 1, 'sent'), report(GM, 2, 'sending'),
     ]
     const incidents = buildIncidents(events)
-    expect(incidents.map((i) => i.zip)).toEqual([DV, GM]) // newest outbreak first
+    expect(incidents.map((i) => i.zip)).toEqual([GM, DV])
     for (const i of incidents) {
-      for (const e of [i.injected, i.detected, i.allocation, i.briefing, i.containment]) expect(e?.zip_code).toBe(i.zip)
+      expect(i.detected.zip_code).toBe(i.zip)
     }
     expect(incidents.find((i) => i.zip === GM)!.episodeId).toBe(2)
   })
 
-  it('lets the AI briefing replace the rule-based one and closes when rides are re-enabled', () => {
+  it('closes on CRITICAL exit while keeping late report results attached', () => {
     const [incident] = buildIncidents([
-      critical(GM, '2026-10-02'), alloc(GM, 1), directive(GM, 1, 'template'), directive(GM, 1, 'llm'),
-      ride(GM, 1, 'disable'), ride(GM, 1, 'enable'),
+      critical(GM, '2026-10-02'), opened(GM, 1), closed(GM), report(GM, 1, 'sent'),
     ])
-    expect(incident.injected).toBeUndefined() // a CRITICAL without an injection still gets a card
-    expect((incident.briefing!.payload as { source: string }).source).toBe('llm')
-    expect(incident.briefingUpdated).toBe(true)
+    expect(incident.report?.status).toBe('sent')
     expect(phaseOf(incident)).toBe('closed')
   })
 
   it('opens a new card when a closed zone goes critical again', () => {
     const incidents = buildIncidents([
-      critical(GM, '2026-10-02'), alloc(GM, 1), ride(GM, 1, 'enable'), critical(GM, '2026-10-08'), alloc(GM, 2),
+      critical(GM, '2026-10-02'), opened(GM, 1), closed(GM), critical(GM, '2026-10-08'), opened(GM, 2),
     ])
     expect(incidents).toHaveLength(2)
     expect(focusZip(incidents)).toBe(GM)

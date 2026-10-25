@@ -50,7 +50,6 @@ export function Header(p: Props) {
   const playing = clock?.playing ?? false
   const held = clock?.awaiting_approval ?? false
   const why = atEnd ? 'Timeline ended: reset to run again' : undefined
-  const heldWhy = held ? 'Waiting for a decision on the proposed stock move' : undefined
   return (
     <header className="header">
       <div className="brand">
@@ -64,7 +63,7 @@ export function Header(p: Props) {
           <>
             <strong className="when-date">{longDate(clock.sim_date)}</strong>
             <span className="when-day" data-testid="clock-day">Day {clock.day} of {lastDay(clock)}</span>
-            {held && <span className="when-day when-held" data-testid="clock-held"> · waiting for approval</span>}
+            {held && <span className="when-day when-held" data-testid="clock-held"> · alert awaiting approval</span>}
           </>
         ) : <strong className="when-date">Connecting…</strong>}
       </div>
@@ -77,8 +76,8 @@ export function Header(p: Props) {
             <button onClick={p.onPlay} disabled={!clock || atEnd || p.busy} data-testid="play"
                     title={why ?? 'Play (Space)'}>▶ Play</button>
           )}
-          <button onClick={p.onStep} disabled={!clock || atEnd || p.busy || playing || held} data-testid="step"
-                  title={why ?? heldWhy ?? (playing ? 'Pause to step one day at a time' : 'Step one day (→)')}>⏭ Step</button>
+          <button onClick={p.onStep} disabled={!clock || atEnd || p.busy || playing} data-testid="step"
+                  title={why ?? (playing ? 'Pause to step one day at a time' : 'Step one day (→)')}>⏭ Step</button>
           <div className="popover-anchor">
             <button onClick={() => setSpeedOpen((o) => !o)} disabled={!clock || atEnd} aria-haspopup="menu"
                     aria-expanded={speedOpen} data-testid="speed" title={why ?? 'Seconds per simulated day'}>

@@ -1,1 +1,1 @@
-"""The autobalancer agent: deterministic allocation in the tick, briefing text after it."""
+"""Observed incident summaries and explicitly approved Gemini PDF/email reports."""

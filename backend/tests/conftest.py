@@ -9,18 +9,15 @@ OUTBREAK_ZONE = "greater-manchester"
 OTHER_ZONE = "devon"
 
 
-# Most tests run with no approval step (stock moves in the tick); test_approval.py turns it on.
-
-
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(db_path=tmp_path / "test.sqlite3", seed=42, approval_timeout_s=0)
+    return Settings(db_path=tmp_path / "test.sqlite3", seed=42)
 
 
 @pytest.fixture
 def client(settings):
-    # directive_writer=None: tests never call a real LLM, even if a key is configured.
-    with TestClient(create_app(settings, directive_writer=None)) as c:  # runs the lifespan (sim + clock)
+    from backend.tests.agent_helpers import FakeReportService
+    with TestClient(create_app(settings, report_service=FakeReportService())) as c:
         yield c
 
 
@@ -29,11 +26,10 @@ def make_sim(tmp_path):
     """Factory for independent Simulations, each with its own DB file."""
     sims = []
 
-    def make(seed: int = 42, name: str = "sim", writer=None, rideshare=None,
-             approval_timeout_s: float = 0) -> Simulation:
-        sim = Simulation(Settings(db_path=tmp_path / f"{name}-{len(sims)}.sqlite3", seed=seed,
-                                  approval_timeout_s=approval_timeout_s),
-                         directive_writer=writer, rideshare=rideshare)
+    def make(seed: int = 42, name: str = "sim", report_service=None) -> Simulation:
+        from backend.tests.agent_helpers import FakeReportService
+        sim = Simulation(Settings(db_path=tmp_path / f"{name}-{len(sims)}.sqlite3", seed=seed),
+                         report_service=report_service or FakeReportService())
         sims.append(sim)
         return sim
 

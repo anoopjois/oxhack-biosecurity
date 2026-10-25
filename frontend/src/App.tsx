@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeatureCollection } from 'geojson'
-import type { AllocationPayload } from './api/types'
 import { Header } from './components/Header'
 import { Incidents } from './components/Incidents'
-import { MapView, type ArcSet, type BaseMode } from './components/MapView'
+import { MapView, type BaseMode } from './components/MapView'
 import { RawLog } from './components/RawLog'
 import { CRITICAL_LINE } from './components/ScoreChart'
 import { SpikeDialog } from './components/SpikeDialog'
@@ -12,12 +11,11 @@ import { ZonePanel } from './components/ZonePanel'
 import { leadMarkers, shortcutFor } from './lib/behaviour'
 import { injectionDate } from './lib/events'
 import { shortDate } from './lib/format'
-import { buildIncidents, decisionOf, focusZip } from './lib/incidents'
+import { buildIncidents, focusZip } from './lib/incidents'
 import { DEMO_ZONE, useSimulation } from './state/useSimulation'
 import { useTheme } from './state/useTheme'
 import { useZoneHistory } from './state/useZoneHistory'
 
-export const ARC_LIFETIME_MS = 20_000
 const START_DAY = 27
 
 export default function App() {
@@ -34,7 +32,6 @@ export default function App() {
   const [speedPref, setSpeedPref] = useState(1)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const [arcs, setArcs] = useState<ArcSet | null>(null)
   const [mode, setMode] = useState<BaseMode>('vector')
   const [fellBack, setFellBack] = useState(false)
   const [outline, setOutline] = useState<FeatureCollection | null>(null)
@@ -45,19 +42,6 @@ export default function App() {
     fetch('/england.geojson').then((r) => r.json()).then(setOutline).catch(() => undefined)
   }, [])
 
-  // New allocations draw arcs; they stay while a decision is pending, then fade after
-  // ARC_LIFETIME_MS or when replaced. An overridden proposal loses its arcs at once.
-  useEffect(() => {
-    if (sim.newAllocations.length === 0) return
-    setArcs({ key: Date.now(), allocations: sim.newAllocations.map((e) => e.payload as unknown as AllocationPayload) })
-  }, [sim.newAllocations])
-  const pendingCount = sim.deadlines.size
-  useEffect(() => {
-    if (!arcs || pendingCount > 0) return
-    const t = window.setTimeout(() => setArcs(null), ARC_LIFETIME_MS)
-    return () => window.clearTimeout(t)
-  }, [arcs, pendingCount])
-  useEffect(() => setArcs(null), [clock?.run])
   useEffect(() => {
     if (!notice) return
     const t = window.setTimeout(() => setNotice(null), 4000)
@@ -66,13 +50,6 @@ export default function App() {
 
   // The timeline follows the selected area if it has an incident, otherwise the newest incident.
   const incidents = useMemo(() => buildIncidents(sim.events), [sim.events])
-  const overridden = useMemo(() => new Set(incidents.map(decisionOf)
-    .filter((d) => d?.decision === 'overridden').map((d) => d!.episode_id)), [incidents])
-  const shownArcs = useMemo(() => {
-    if (!arcs) return null
-    const allocations = arcs.allocations.filter((a) => !overridden.has(a.episode_id))
-    return allocations.length > 0 ? { ...arcs, allocations } : null
-  }, [arcs, overridden])
   const focus = selected && incidents.some((i) => i.zip === selected) ? selected : focusZip(incidents) ?? null
   const day = clock?.day ?? null
   const run = clock?.run ?? null
@@ -136,7 +113,7 @@ export default function App() {
         if (clock.playing) pause()
         else if (!clock.at_end) play()
       } else if (action === 'step') {
-        if (!clock.playing && !clock.at_end && !clock.awaiting_approval) step()
+        if (!clock.playing && !clock.at_end) step()
       } else if (action === 'reset') setConfirmReset(true)
       else if (action === 'spike') openSpike()
       else if (action === 'help') setHelpOpen((h) => !h)
@@ -172,7 +149,7 @@ export default function App() {
               onBaseMode={(m) => { setMode(m); setFellBack(false) }} onShowLog={setShowLog} />
       <main className="main">
         <div className="cell-map">
-          <MapView zones={zones} selected={selected} picking={spikeOpen} arcs={shownArcs} outline={outline}
+          <MapView zones={zones} selected={selected} picking={spikeOpen} arcs={null} outline={outline}
                    mode={mode} fellBack={fellBack}
                    onFallBack={() => { setMode('vector'); setFellBack(true) }}
                    onZoneClick={onZoneClick} />
@@ -180,8 +157,9 @@ export default function App() {
             <div className="coach" role="dialog" aria-label="Getting started" data-testid="coach">
               <h2>Watch an outbreak unfold</h2>
               <p>Press <b>★ Run demo</b>: a simulated pathogen spike hits Greater Manchester. Watch the system
-                spot it in wastewater, forecast the surge two days early, and propose moving medical stock before
-                hospitals fill up. You approve it, or it goes ahead by itself after a short countdown if nobody objects.</p>
+                spot it in wastewater and forecast the surge two days early. Review the short incident summary,
+                then approve a Gemini-generated PDF report to be emailed to the configured test recipient.
+                Nothing is sent automatically.</p>
               <div className="coach-actions">
                 <button className="btn btn-primary" onClick={runDemo}>★ Run demo</button>
                 <button className="btn btn-ghost" onClick={() => setCoachDismissed(true)} data-testid="coach-dismiss">
@@ -204,9 +182,9 @@ export default function App() {
                      spikeDate={selected ? injectionDate(sim.events, selected) : undefined} onSelect={setSelected} />
           {showLog
             ? <RawLog events={sim.events} />
-            : <Incidents events={sim.events} zones={zones} onSelect={setSelected} deadlines={sim.deadlines} busy={busy}
+            : <Incidents events={sim.events} zones={zones} onSelect={setSelected} busy={busy}
                          onApprove={(id) => act(() => sim.approve(id))} onOverride={(id) => act(() => sim.override(id))}
-                         onShowArcs={(payload) => setArcs({ key: Date.now(), allocations: [payload] })} />}
+                         onRetry={(id) => act(() => sim.retryReport(id))} />}
         </div>
       </main>
       <Timeline clock={clock} spike={focus ? injectionDate(sim.events, focus) : undefined}

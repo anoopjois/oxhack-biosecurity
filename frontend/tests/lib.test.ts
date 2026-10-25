@@ -1,11 +1,11 @@
 // Layer A: pure logic.
 import { describe, expect, it } from 'vitest'
-import { approvalDeadlines, DEADLINE_JITTER_MS, leadMarkers, pollInterval, shortcutFor, shouldUseOffline } from '../src/lib/behaviour'
-import { buildFeed, isDefaultVisible, latestAllocation } from '../src/lib/events'
+import { leadMarkers, pollInterval, shortcutFor, shouldUseOffline } from '../src/lib/behaviour'
+import { buildFeed, isDefaultVisible } from '../src/lib/events'
 import { compact, doublingDays, longDate, shortDate, shortName } from '../src/lib/format'
 import { arcPoints, arrowRotation } from '../src/lib/geo'
 import { countByStatus, PIN_DOT_RADIUS, PIN_RING_RADIUS, PIN_SELECTED_RADIUS, RISK_SCORE_HELP, STATUS_META } from '../src/lib/status'
-import { briefing, event } from './fixtures'
+import { event } from './fixtures'
 
 describe('status and pins', () => {
   it('maps every status to a colour and a text label', () => {
@@ -57,12 +57,12 @@ describe('arcs', () => {
 })
 
 describe('event feed', () => {
-  it('default filter: injections, transitions to CRITICAL, agent events, webhooks, timeline end', () => {
+  it('default filter includes detected incidents and report progress', () => {
     expect(isDefaultVisible(event('OUTBREAK_INJECTED'))).toBe(true)
     expect(isDefaultVisible(event('STATUS_CHANGE', { from: 'ELEVATED', to: 'CRITICAL' }))).toBe(true)
     expect(isDefaultVisible(event('STATUS_CHANGE', { from: 'SAFE', to: 'ELEVATED' }))).toBe(false)
     expect(isDefaultVisible(event('STATUS_CHANGE', { from: 'CRITICAL', to: 'ELEVATED' }))).toBe(false)
-    for (const t of ['AGENT_ALLOCATION', 'AGENT_DIRECTIVE', 'RIDESHARE_WEBHOOK', 'TIMELINE_END']) {
+    for (const t of ['INCIDENT_OPENED', 'INCIDENT_DECISION', 'REPORT_STATUS', 'TIMELINE_END']) {
       expect(isDefaultVisible(event(t))).toBe(true)
     }
   })
@@ -72,37 +72,16 @@ describe('event feed', () => {
       event('OUTBREAK_INJECTED', {}, { sim_date: '2026-09-28' }),
       event('STATUS_CHANGE', { from: 'SAFE', to: 'ELEVATED' }, { sim_date: '2026-09-30' }),
       event('STATUS_CHANGE', { from: 'ELEVATED', to: 'CRITICAL' }, { sim_date: '2026-10-02' }),
-      event('AGENT_ALLOCATION', {}, { sim_date: '2026-10-02' }),
-      event('RIDESHARE_WEBHOOK', {}, { sim_date: '2026-10-02' }),
+      event('INCIDENT_OPENED', {}, { sim_date: '2026-10-02' }),
+      event('REPORT_STATUS', {}, { sim_date: '2026-10-02' }),
     ]
     expect(buildFeed(evs, false)).toHaveLength(4)
     expect(buildFeed(evs, true).map((i) => [i.date, i.event.type])).toEqual([
-      ['2026-10-02', 'STATUS_CHANGE'], ['2026-10-02', 'AGENT_ALLOCATION'], ['2026-10-02', 'RIDESHARE_WEBHOOK'],
+      ['2026-10-02', 'STATUS_CHANGE'], ['2026-10-02', 'INCIDENT_OPENED'], ['2026-10-02', 'REPORT_STATUS'],
       ['2026-09-30', 'STATUS_CHANGE'], ['2026-09-28', 'OUTBREAK_INJECTED'],
     ])
   })
 
-  it('keeps one briefing per episode; the AI version replaces the rule-based one in place', () => {
-    const evs = [
-      event('AGENT_DIRECTIVE', briefing('template', 'Rule headline') as unknown as Record<string, unknown>),
-      event('RIDESHARE_WEBHOOK'),
-      event('AGENT_DIRECTIVE', briefing('llm', 'AI headline') as unknown as Record<string, unknown>),
-    ]
-    const feed = buildFeed(evs, false)
-    expect(feed.map((i) => i.kind)).toEqual(['briefing', 'event']) // keeps the first version's place
-    const card = feed[0]
-    if (card.kind === 'briefing') {
-      expect(card.payload.headline).toBe('AI headline')
-      expect(card.updated).toBe(true)
-    }
-  })
-
-  it('finds the latest allocation', () => {
-    const a = event('AGENT_ALLOCATION', { episode_id: 1 })
-    const b = event('AGENT_ALLOCATION', { episode_id: 2 })
-    expect(latestAllocation([a, event('X'), b, event('Y')])).toBe(b)
-    expect(latestAllocation([])).toBeUndefined()
-  })
 })
 
 describe('behaviour', () => {
@@ -164,20 +143,5 @@ describe('arc labels', () => {
     expect(labelOffset([53.5, -2.9], target)).toBe('translate(calc(-100% - 18px), -50%)') // west
     expect(labelOffset([54.0, -2.25], target)).toBe('translate(-50%, calc(-100% - 18px))') // north: above
     expect(labelOffset([53.0, -2.25], target)).toBe('translate(-50%, 18px)')              // south: below
-  })
-})
-
-describe('approval countdown', () => {
-  it('turns seconds_left into a local deadline and keeps it steady across polls', () => {
-    const first = approvalDeadlines(new Map(), [{ episode_id: 1, seconds_left: 30, timeout_s: 30 }], 1_000)
-    expect(first.get(1)).toEqual({ at: 31_000, timeoutS: 30 })
-    // A later poll reports slightly less time than expected (request latency): keep the old deadline.
-    const second = approvalDeadlines(first, [{ episode_id: 1, seconds_left: 27.5, timeout_s: 30 }], 3_000)
-    expect(second.get(1)).toBe(first.get(1))
-    // A real jump (more than the jitter allowance) is taken over.
-    const jumped = approvalDeadlines(first, [{ episode_id: 1, seconds_left: 10, timeout_s: 30 }], 3_000 + DEADLINE_JITTER_MS)
-    expect(jumped.get(1)!.at).toBe(3_000 + DEADLINE_JITTER_MS + 10_000)
-    // Decided episodes drop out.
-    expect(approvalDeadlines(first, [], 4_000).size).toBe(0)
   })
 })

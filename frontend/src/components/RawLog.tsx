@@ -21,7 +21,7 @@ export function RawLog({ events }: { events: SimEvent[] }) {
         {items.map((item) => (
           <li key={item.key} className={`log-row sev-${item.event.severity}`} data-type={item.event.type} data-testid="feed-card">
             <span className="log-date">{shortDate(item.event.sim_date)}</span>
-            <span>{item.kind === 'briefing' ? `${item.payload.source_label}: ${item.payload.headline}` : item.event.message}</span>
+            <span>{item.event.message}</span>
           </li>
         ))}
       </ol>

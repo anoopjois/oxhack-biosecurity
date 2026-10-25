@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
-import type { Facility, MapStatus, SimEvent } from '../api/types'
-import { approvalDeadlines, pollInterval, type Deadlines } from '../lib/behaviour'
+import type { MapStatus, SimEvent } from '../api/types'
+import { pollInterval } from '../lib/behaviour'
 
 export const DEMO_ZONE = 'greater-manchester'
 export const DEMO_R = 0.4
@@ -10,12 +10,7 @@ export const DEMO_SECONDS_PER_DAY = 1.0
 export interface Simulation {
   status: MapStatus | null
   events: SimEvent[]
-  inventory: Facility[]
   connected: boolean
-  /** Allocation events that arrived in the latest poll (drives the map arcs). */
-  newAllocations: SimEvent[]
-  /** Pending stock moves: episode id -> when it auto-approves (local ms clock). */
-  deadlines: Deadlines
   play: (secondsPerDay?: number) => Promise<void>
   pause: () => Promise<void>
   step: () => Promise<void>
@@ -24,31 +19,25 @@ export interface Simulation {
   runDemo: () => Promise<void>
   approve: (episodeId: number) => Promise<void>
   override: (episodeId: number) => Promise<void>
+  retryReport: (episodeId: number) => Promise<void>
 }
 
 /**
  * All server state. Polls map-status and events (incrementally, by since_id) every 1 s while
- * playing or awaiting an approval and 3 s otherwise, refetches right after every action, refetches inventory when
- * a new allocation arrives, and clears every cache when clock.run changes (a reset).
+ * playing, awaiting approval or processing reports and 3 s otherwise.
+ * Refetches after every action and clears caches when clock.run changes.
  * Polls never overlap and pause while the tab is hidden.
  */
 export function useSimulation(): Simulation {
   const [status, setStatus] = useState<MapStatus | null>(null)
   const [events, setEvents] = useState<SimEvent[]>([])
-  const [inventory, setInventory] = useState<Facility[]>([])
   const [connected, setConnected] = useState(true)
-  const [newAllocations, setNewAllocations] = useState<SimEvent[]>([])
-  const [deadlines, setDeadlines] = useState<Deadlines>(new Map())
 
   const lastEventId = useRef(0)
   const run = useRef<number | null>(null)
-  // The first events fetch of a run (page load, or right after a reset) is a baseline: events
-  // that already happened must not replay their arcs and camera flight.
-  const baseline = useRef(true)
   const inFlight = useRef(false)
   const playing = useRef(false)
-
-  const refreshInventory = useCallback(async () => setInventory(await api.inventory()), [])
+  const reportStates = useRef(new Map<number, string>())
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return
@@ -59,31 +48,31 @@ export function useSimulation(): Simulation {
         // A reset (or first load): drop everything cached from the previous run.
         run.current = next.clock.run
         lastEventId.current = 0
-        baseline.current = true
+        reportStates.current.clear()
         setEvents([])
-        setNewAllocations([])
-        await refreshInventory()
       }
-      playing.current = next.clock.playing || next.clock.awaiting_approval
       setStatus(next)
-      setDeadlines((old) => approvalDeadlines(old, next.approvals ?? [], Date.now()))
       const fresh = await api.events(lastEventId.current)
       if (fresh.events.length > 0) {
         lastEventId.current = fresh.last_id
         setEvents((old) => [...old, ...fresh.events])
-        const allocations = fresh.events.filter((e) => e.type === 'AGENT_ALLOCATION')
-        if (allocations.length > 0 && !baseline.current) setNewAllocations(allocations)
-        // Stock moves when a proposal is approved (AGENT_DECISION), not when it is proposed.
-        if (fresh.events.some((e) => e.type === 'AGENT_DECISION')) await refreshInventory()
+        for (const event of fresh.events) {
+          if (event.type === 'INCIDENT_OPENED' || event.type === 'INCIDENT_DECISION' || event.type === 'REPORT_STATUS') {
+            const { episode_id, status } = event.payload
+            if (typeof episode_id === 'number' && typeof status === 'string') reportStates.current.set(episode_id, status)
+          }
+        }
       }
-      baseline.current = false
+      playing.current = next.clock.playing || next.clock.awaiting_approval ||
+        [...reportStates.current.values()].some((s) => ['queued', 'generating', 'sending'].includes(s))
       setConnected(true)
     } catch (err) {
-      if (!(err instanceof ApiError)) setConnected(false)
+      setConnected(false)
+      if (err instanceof ApiError) console.error('Simulation refresh failed:', err.message)
     } finally {
       inFlight.current = false
     }
-  }, [refreshInventory])
+  }, [])
 
   // Poll loop: a setTimeout chain, so the cadence follows play/pause and calls never overlap.
   useEffect(() => {
@@ -120,7 +109,8 @@ export function useSimulation(): Simulation {
 
   const approve = useCallback((id: number) => act(() => api.approve(id)), [act])
   const override = useCallback((id: number) => act(() => api.override(id)), [act])
+  const retryReport = useCallback((id: number) => act(() => api.retryReport(id)), [act])
 
-  return { status, events, inventory, connected, newAllocations, deadlines, play, pause, step, reset, trigger,
-           runDemo, approve, override }
+  return { status, events, connected, play, pause, step, reset, trigger,
+           runDemo, approve, override, retryReport }
 }

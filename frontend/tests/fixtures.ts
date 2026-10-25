@@ -1,4 +1,4 @@
-import type { AllocationPayload, Clock, DecisionPayload, DirectivePayload, SimEvent, Zone } from '../src/api/types'
+import type { AllocationPayload, Clock, SimEvent, Zone } from '../src/api/types'
 
 export const clock = (over: Partial<Clock> = {}): Clock => ({
   day: 31, sim_date: '2026-10-02', first_date: '2026-09-01', last_date: '2026-10-12', playing: false,
@@ -40,23 +40,3 @@ export const allocation: AllocationPayload = {
   target_before: { ppe_units: 74900, antiviral_doses: 18900, vaccine_doses: 36600 },
   target_after: { ppe_units: 116000, antiviral_doses: 29000, vaccine_doses: 58000 },
 }
-
-export const briefing = (source: 'template' | 'llm', headline: string): DirectivePayload => ({
-  episode_id: 1, source, source_label: source === 'template' ? 'Rule-based briefing' : 'AI briefing (Claude)',
-  model: source === 'llm' ? 'claude-opus-5-5' : null, headline,
-  rationale: 'Greater Manchester entered CRITICAL on 2 Oct 2026.',
-  directives: [
-    { action: 'Suspend pooled rideshare', detail: 'Executed via webhook.', priority: 'immediate', category: 'mobility' },
-    { action: 'Prioritise antivirals', detail: '10,100 doses arriving.', priority: '24h', category: 'supply' },
-    { action: 'Issue a public advisory', detail: 'Symptoms and testing.', priority: '72h', category: 'communication' },
-  ],
-})
-
-/** AGENT_DECISION for the allocation above. */
-export const decision = (over: Partial<DecisionPayload> = {}): DecisionPayload => ({
-  episode_id: 1, decision: 'approved', by: 'operator', target: 'greater-manchester',
-  transfers: allocation.transfers.map(({ donor, donor_name, distance_km, ppe_units, antiviral_doses, vaccine_doses,
-                                         donor_after, reserve_days_after }) =>
-    ({ donor, donor_name, distance_km, ppe_units, antiviral_doses, vaccine_doses, donor_after, reserve_days_after })),
-  target_after: allocation.target_after, reserve_floor_days: 4.2, ...over,
-})

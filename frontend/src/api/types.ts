@@ -13,7 +13,7 @@ export interface Clock {
   at_end: boolean
   seed: number
   run: number
-  /** The clock is held until a proposed stock move is approved or overridden. */
+  /** Pending alert notifications; these do not hold the clock. */
   awaiting_approval: boolean
 }
 
@@ -43,12 +43,28 @@ export interface Zone {
   telemetry: Telemetry
 }
 
-/** A proposed stock move waiting for an operator; it auto-approves when seconds_left reaches 0. */
+/** A report notification waiting for explicit operator approval. */
 export interface PendingApproval {
   episode_id: number
   zip_code: string
-  seconds_left: number
-  timeout_s: number
+  recipient: string
+}
+
+export type ReportStatus = 'awaiting_approval' | 'queued' | 'generating' | 'sending' | 'sent' | 'failed' | 'delivery_unknown' | 'rejected'
+
+export interface IncidentPayload {
+  episode_id: number
+  summary: string
+  recipient: string
+  status: ReportStatus
+}
+
+export interface ReportPayload {
+  episode_id: number
+  status: ReportStatus
+  recipient: string
+  error?: string | null
+  has_pdf?: boolean
 }
 
 export interface MapStatus {
@@ -92,39 +108,6 @@ export interface AllocationPayload {
   coverage_pct: Stock
   target_before: Stock
   target_after: Stock
-}
-
-export type DecisionBy = 'operator' | 'timeout' | 'policy'
-
-/** AGENT_DECISION: what happened to a proposal. `policy` = no approval step was needed. */
-export interface DecisionPayload {
-  episode_id: number
-  decision: 'approved' | 'overridden'
-  by: DecisionBy
-  target: string
-  transfers: (Stock & { donor: string; donor_name: string; distance_km: number; donor_after: Stock; reserve_days_after: number })[]
-  target_after: Stock
-  reserve_floor_days: number
-}
-
-export type Priority = 'immediate' | '24h' | '72h'
-
-export interface Directive {
-  action: string
-  detail: string
-  priority: Priority
-  category: string
-}
-
-export interface DirectivePayload {
-  episode_id: number
-  source: 'template' | 'llm'
-  source_label: string
-  model: string | null
-  headline: string
-  rationale: string
-  directives: Directive[]
-  ignored_fields?: string[]
 }
 
 export interface StatusChangePayload {
