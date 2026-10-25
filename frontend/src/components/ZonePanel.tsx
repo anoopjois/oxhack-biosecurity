@@ -10,7 +10,6 @@ const HELP = {
   forecast: 'The risk score forecast two days ahead, from how fast the virus is growing in wastewater. '
     + 'An alert is raised when it passes 80 and the growth is statistically clear.',
   doubling: 'How many days the virus level in wastewater takes to double at its current growth rate.',
-  ae: 'Average A&E waiting time today, against this area’s usual level. A&E demand trails wastewater by about 4 days.',
 }
 
 interface Props {
@@ -27,7 +26,6 @@ export function ZonePanel({ zones, selected, history, spikeDate, onSelect }: Pro
 
   const days = (history?.days ?? []).filter((d) => d.score !== null)
   const { alert, cross } = leadMarkers(days, CRITICAL_LINE)
-  const er = zone.telemetry.er_avg_wait_mins
   const growing = zone.r_hat !== null && zone.r_hat > 0 && zone.doubling_days !== null && zone.doubling_days < 30
   return (
     <section className="card zone" data-testid="zone-panel">
@@ -43,8 +41,6 @@ export function ZonePanel({ zones, selected, history, spikeDate, onSelect }: Pro
               hot={(zone.projected_score ?? 0) >= CRITICAL_LINE} />
         <Stat label="Doubling" help={HELP.doubling} value={growing ? zone.doubling_days!.toFixed(1) : 'Stable'}
               unit={growing ? 'days' : undefined} />
-        <Stat label="A&E wait" help={HELP.ae} align="right" value={er === null ? '—' : String(Math.round(er))} unit="min"
-              sub={zone.er_baseline === null ? undefined : `usual ${Math.round(zone.er_baseline)}`} />
       </dl>
       <div className="chart-legend">
         <span className="lg-now">Risk now</span><span className="lg-forecast">Forecast, 48 hours ahead</span>
@@ -75,13 +71,13 @@ function Caption({ alert, hit, status, spike }: { alert?: string; hit?: string; 
   return <p className={`caption${lead ? ' caption-lead' : ''}`} data-testid="lead-note">{text}</p>
 }
 
-function Stat({ label, help, value, unit, sub, hot = false, align = 'left' }: {
-  label: string; help: string; value: string; unit?: string; sub?: string; hot?: boolean; align?: 'left' | 'right'
+function Stat({ label, help, value, unit, hot = false }: {
+  label: string; help: string; value: string; unit?: string; hot?: boolean
 }) {
   return (
     <div className={`stat${hot ? ' stat-hot' : ''}`}>
-      <dt>{label} <Info text={help} label={`About ${label}`} align={align} /></dt>
-      <dd>{value}{unit && <small> {unit}</small>}{sub && <small className="stat-sub"> · {sub}</small>}</dd>
+      <dt>{label} <Info text={help} label={`About ${label}`} /></dt>
+      <dd>{value}{unit && <small> {unit}</small>}</dd>
     </div>
   )
 }

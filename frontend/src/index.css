@@ -374,7 +374,7 @@ kbd {
 
 /* ------------------------------------------------------------ zone card */
 .zone { display: flex; flex-direction: column; }
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s2); margin: 0; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); margin: 0; }
 .stat dt { font-size: 0.75rem; color: var(--muted); font-weight: 650; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .stat dd { margin: 0; font-size: 1.45rem; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stat dd small { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
