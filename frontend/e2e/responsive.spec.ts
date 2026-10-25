@@ -249,10 +249,15 @@ test('dashboard explains viral outbreak risk and its inputs without badges or si
   await mockSimulation(page, clock({ day: 33, sim_date: '2026-10-04' }), incidents)
   await expect(page.getByTestId('poc-badge')).toHaveCount(0)
   await expect(page.getByText('Viral outbreak early warning', { exact: true })).toBeVisible()
+  const logo = page.getByRole('img', { name: 'BioSecure' })
+  await expect(logo).toBeVisible()
+  await expect.poll(() => logo.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)
+  await expect(page.locator('.brand-dot')).toHaveCount(0)
+  await expect(page.getByText('BioSecure', { exact: true })).toHaveCount(0)
   for (const width of [320, 1280]) {
     await page.setViewportSize({ width, height: 720 })
-    const brand = await page.locator('.brand-title').evaluate((element) => {
-      const title = element.querySelector('h1')!.getBoundingClientRect()
+    const brand = await page.locator('.brand').evaluate((element) => {
+      const title = element.querySelector('img')!.getBoundingClientRect()
       const purpose = element.querySelector('p')!.getBoundingClientRect()
       return { beside: purpose.left >= title.right, overlappingRows: purpose.top < title.bottom && purpose.bottom > title.top }
     })

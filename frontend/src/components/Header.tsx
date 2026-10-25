@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Clock } from '../api/types'
+import biosecureLogo from '../assets/biosecure-logo.jpeg'
 import { SHORTCUTS, SPEEDS, shortcutFor } from '../lib/behaviour'
 import { longDate } from '../lib/format'
 import { RISK_SCORE_HELP } from '../lib/status'
@@ -62,11 +63,8 @@ export function Header(p: Props) {
   return (
     <header className="header">
       <div className="brand">
-        <span className="brand-dot" aria-hidden />
-        <div className="brand-title">
-          <h1>BioSecure</h1>
-          <p>Viral outbreak early warning</p>
-        </div>
+        <h1><img className="brand-logo" src={biosecureLogo} alt="BioSecure" width="1150" height="380" /></h1>
+        <p>Viral outbreak early warning</p>
       </div>
 
       <div className="when" data-testid="clock">

@@ -10,7 +10,7 @@ See the [setup instructions](../README.md) and [talk track](DEMO_SCRIPT.md).
   `daeyad1@gmail.com`, not an official authority.
 - Gmail needs an app password, not the normal account password.
 - Start both servers, open http://localhost:5173 and verify **Viral outbreak early
-  warning** appears beside **BioSecure**, with no proof-of-concept badge. The header
+  warning** appears beside the **BioSecure logo**, with no proof-of-concept badge. The header
   shows an assessment date, not a day counter.
 - Optionally run the manual Gemini PDF smoke command from the README. It never emails.
 - A real end-to-end send is a separate operator action: only click **Approve & send

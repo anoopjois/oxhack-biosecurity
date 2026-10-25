@@ -8,7 +8,7 @@ Use the [checklist](DEMO_CHECKLIST.md) first. All data and alerts are synthetic.
 Wastewater can show a rise before hospital pressure becomes obvious. We forecast
 risk 48 hours ahead so an operator can review a developing incident early."
 
-Point to **Viral outbreak early warning** beside **BioSecure**. Explain
+Point to **Viral outbreak early warning** beside the **BioSecure logo**. Explain
 that this presentation uses generated data, then click **Run demo**. The dashboard
 shows assessment dates rather than simulation day counters.
 
