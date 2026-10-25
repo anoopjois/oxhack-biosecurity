@@ -1,215 +1,338 @@
-# BioSecure: early warning and approved incident reporting
+# BioSecure
 
-This hackathon demo monitors synthetic wastewater and A&E telemetry across England's
-36 ICBs (the April 2026 structure), forecasts risk 48 hours ahead, and opens an incident when the forecast is critical
-and growth is statistically significant.
+## Viral outbreak early warning
 
-**All data is synthetic. Reports and emails are prominently labelled as exercises.**
+BioSecure is a proof-of-concept dashboard for **identifying rising viral-outbreak risk
+and forecasting a risk index 48 hours ahead** across England's 36 NHS Integrated Care
+Boards (ICBs). It combines wastewater viral load, A&E waiting-time pressure and a
+mobility/crowding index, helping an operator review unusual signals before the
+current risk index reaches its critical level.
 
-The incident card shows a short evidence-based summary. An operator can **Approve &
-send report** or **Dismiss**. Approval calls Gemini to write an assessment, renders a
-professional PDF, and emails it using SMTP. There is no auto-approval, stock transfer,
-rideshare action or separate briefing. Pending approvals and report delivery do not
-stop the simulation clock. Synthetic injection remains a demo control and chart marker,
-but no longer appears as a hidden step in incident cards.
+**The current application uses entirely synthetic telemetry.** It is a statistical
+demonstrator, not a live surveillance service, a pathogen-identification system or a
+clinically validated outbreak predictor. A score of 80/100 is an index, **not an 80%
+probability of an outbreak**. Reports and emails are labelled as exercises.
 
-## ICB coverage
+### What it does
 
-[engine/zones.csv](engine/zones.csv) follows the 36 ICBs effective **1 April 2026**,
-verified against the [ONS names and codes register](https://geoportal.statistics.gov.uk/datasets/integrated-care-boards-april-2026-names-and-codes-in-en/explore).
-Names omit the common "NHS" prefix and "Integrated Care Board" suffix for display.
+- Maps each ICB as Normal, Elevated, Critical or Insufficient data.
+- Shows current risk, a 48-hour forecast, estimated viral doubling time and risk history.
+- Explains the three factor weights in the England overview; selecting an area
+  shows its readings, baseline comparisons where applicable, and score contributions.
+- Creates an incident when the risk forecast is critical **and** wastewater growth
+  is statistically positive.
+- Requires explicit **Approve & send report** or **Dismiss**. Approval asks Gemini for
+  a brief situation assessment, renders a PDF and emails it to the displayed address.
+- Names the affected ICB as the intended authority for NHS preparedness review,
+  with proposed liaison with UKHSA and local public health.
 
-| Current ICB | Former areas incorporated |
+It does **not** automatically email authorities, diagnose infections, order clinical
+interventions, move stock or control rideshare services. Actual delivery uses one
+configured address for every area, not a directory of official ICB contacts.
+
+### Problem, audience and value
+
+The problem BioSecure explores is the gap between spotting an unusual population-level
+signal and turning it into a clear, reviewable preparedness decision. Wastewater,
+service pressure and population mixing describe different parts of that picture;
+none alone confirms an outbreak.
+
+The intended users are **ICB population-health and emergency-preparedness teams**,
+with NHS provider operational teams and UKHSA/local public-health partners involved
+in verification and response. An ICB or regional NHS analytics team is a potential
+pilot client, not an existing customer or an implied endorsement.
+
+The proposed value is one regional view of changing signals, an explainable
+short-horizon warning and a concise evidence-backed handoff to the responsible team.
+The current prototype demonstrates that workflow with synthetic data; it does not
+yet establish operational benefit, clinical accuracy or cost savings.
+See the [problem and intended users](docs/SPEC.md#problem-and-intended-users)
+and [proposed scaling path](docs/SPEC.md#proposed-scaling-path-not-implemented).
+
+## Documentation
+
+| Guide | Contents |
 |---|---|
-| Central East | Bedfordshire, Luton and Milton Keynes; Cambridgeshire and Peterborough; Hertfordshire, excluding West Essex |
-| Essex | Mid and South Essex; West Essex; North East Essex |
-| Norfolk and Suffolk | Norfolk and Waveney; Suffolk, excluding North East Essex |
-| West and North London | North West London; North Central London |
-| Thames Valley | Buckinghamshire, Oxfordshire and Berkshire West; East Berkshire from Frimley |
-| Surrey and Sussex | Surrey Heartlands; Sussex; Surrey areas from Frimley |
+| [System design and API](docs/SPEC.md) | Problem, intended users, architecture, reporting, endpoints and proposed scaling path |
+| [Maths and validation](docs/MATHS.md) | Generator, preprocessing, score, forecast, alert rules, measured results and limitations |
 
-Hampshire and Isle of Wight also gains the Hampshire areas of former Frimley.
-See the [NHS ODS merger summary](https://digital.nhs.uk/services/organisation-data-service/upcoming-code-changes/icb-mergers-2026-change-summary)
-for the organisational changes.
+## Tech stack
 
-Coordinates are representative map pins, not boundary polygons. Populations remain
-rounded **demo sizing estimates**, not official 2026 population statistics. Essex
-and Frimley estimates are apportioned between their successors rather than counted
-twice; the previous demo's total population is preserved.
+| Layer | Technology |
+|---|---|
+| Dashboard | React 19, TypeScript 6, Vite 8, CSS, custom SVG charts |
+| Map | Leaflet/react-leaflet, bundled Natural Earth outline; optional OpenStreetMap tiles |
+| Backend | Python, FastAPI, Uvicorn, Pydantic |
+| Statistical engine | NumPy and pandas; rolling statistics, logistic weighting and ordinary least squares |
+| Storage | SQLite in WAL mode |
+| Report generation | Gemini REST API via HTTPX, structured JSON validation, ReportLab PDF |
+| Delivery | SMTP with STARTTLS or implicit TLS |
+| Development/testing | pytest, pypdf, Vitest, Testing Library, Playwright, Oxlint; optional matplotlib scripts |
 
-The backend, map, inventory and reports all read this shared roster; runtime zone
-counts are never fixed in code. Restart the backend after changing the roster:
-startup reloads it into SQLite and resets existing demo incidents and reports.
-Changing the number/order of zones changes seeded noise samples, so old recorded
-demo timings and 42-zone validation figures are not guarantees for the current run.
+The statistical detector is **not machine learning**, and Gemini does not calculate
+scores or decide severity. Python dependencies are declared in
+[requirements.txt](requirements.txt) and [requirements-dev.txt](requirements-dev.txt);
+frontend versions and scripts are in [package.json](frontend/package.json).
 
-**Known validation failure (36-ICB roster):** the unchanged detector produced
-**1 CRITICAL zone-day in 165,600 clean zone-days** across 200 seeds, so the required
-zero-false-CRITICAL test currently fails. The other 96 engine/backend tests pass.
-Lead-time requirements still pass: median 2 days and detection on or before the
-current-score crossing in 100% of seeds. This limitation is retained explicitly;
-the scoring thresholds, generator constants and test requirement were not relaxed.
-See [measured results](docs/MATHS.md#8-measured-results) for the distributions.
+## Local setup
 
-## Run on Windows
+Recommended development environment: **Python 3.12** and **Node.js 22.12+ or 24**, with
+npm. Commands below assume the repository root. Internet access is needed to install
+dependencies; Gemini and email additionally require provider credentials.
 
-Recommended prerequisites: Python 3.13 and Node 24 with npm.
+### Windows / PowerShell
 
-From the repository root in PowerShell:
+One-time setup:
 
 ```powershell
-py -3.13 -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-Copy-Item .env.example .env  # first setup only; do not overwrite existing credentials
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 Set-Location frontend
-npm install
+npm ci
+Set-Location ..
 ```
 
-Start the backend from the repository root in one terminal:
+Using the development requirements also installs PDF-test and plotting dependencies.
+For dashboard-only use, install `requirements.txt` instead.
+
+Start the backend in a terminal at the repository root:
 
 ```powershell
-.\.venv\Scripts\python -m uvicorn backend.main:app --reload --port 8000
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --port 8000
 ```
 
 Start the frontend in a second terminal:
 
 ```powershell
 Set-Location frontend
-npm run dev -- --strictPort
+npm run dev
 ```
 
-Open http://localhost:5173 and click **Run demo**. The health check is
-http://localhost:8000/api/v1/health; API documentation is at http://localhost:8000/docs.
+Open **http://localhost:5173/**, or the URL printed by Vite if that port was occupied.
+The backend health check is **http://localhost:8000/api/v1/health**; interactive API
+documentation is **http://localhost:8000/docs**.
 
-On Linux/macOS or in WSL, `./dev.sh` creates the virtual environment, installs
-dependencies and starts both servers. Its `.venv/bin` paths are not compatible with
-a native Windows virtual environment.
+No virtual-environment activation is required when using the explicit Python path.
+Do not create another environment or install dependencies inside a nested frontend folder.
 
-## Configure Gemini and email
+### Linux / macOS / WSL
 
-Edit your local `.env` before starting the backend. Never commit or paste credentials.
+Create a local configuration if one does not already exist, then start the helper:
 
-```dotenv
-GEMINI_API_KEY=your-google-ai-studio-api-key
-GEMINI_MODEL=gemini-3.8-flash
-REPORT_TIMEOUT_S=600
-ALERT_RECIPIENT=daeyad1@gmail.com
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURITY=starttls
-SMTP_USERNAME=your-sending-account@gmail.com
-SMTP_PASSWORD=your-gmail-app-password
-SMTP_FROM=your-sending-account@gmail.com
+```bash
+test -f .env || cp .env.example .env
+./dev.sh
 ```
 
-For Gmail, enable 2-Step Verification and create an **app password**; do not use your
-ordinary Google account password. Other SMTP providers work with their host,
-credentials and sender address. Use `SMTP_SECURITY=ssl` and the provider's TLS port
-(usually 465) for implicit TLS; plaintext SMTP is not supported.
+The helper creates the root virtual environment, installs runtime dependencies and
+starts both servers. It uses `.venv/bin`, so it is **not** a native Windows launcher.
+In WSL, use a Linux virtual environment rather than reusing a Windows one.
+The helper sources `.env` as shell input: use simple shell-compatible assignments
+and quote values containing spaces or shell metacharacters.
 
-The recipient defaults to **daeyad1@gmail.com**, a test inbox, not an official authority.
-`ALERT_RECIPIENT` is one configured address for all zones; jurisdiction-based authority
-routing is not implemented. Change it only when an authorised recipient is agreed.
-Approval cards, PDFs and emails name the affected **NHS ICB as the intended authority**
-for an early warning and situation report. The dashboard labels the configured inbox
-as **Delivery address** and sends only there. PDFs and emails retain exercise labels
-and identify the test delivery address: approving does **not** separately contact the
-ICB, UKHSA or local authority.
-In real use, the ICB coordinates NHS preparedness and clinical-service planning,
-in liaison with the local UKHSA Health Protection Team and local authority
-Director of Public Health for outbreak assessment and response:
-[UKHSA health protection teams](https://www.gov.uk/health-protection-team) and
-[NHS England ICB outbreak-response guidance](https://www.england.nhs.uk/publication/clinical-response-to-local-incidents-and-outbreaks-of-infectious-disease-commissioning-guidance-for-icbs/).
-Use a model available to your Gemini API key; `GEMINI_MODEL` is configurable.
-Gemini can list retired models in metadata while rejecting generation for new users.
-If generation returns HTTP 404, use a currently supported model and restart the backend;
-`gemini-3.8-flash` replaces the older `gemini-2.5-flash` default.
-Report generation may take several minutes; the default request timeout is 600 seconds (10 minutes).
-Increase `REPORT_TIMEOUT_S` and restart if generation repeatedly times out. Reports
-run in the background, so waiting does not block the simulation clock.
+### First run
 
-Missing credentials do not prevent the dashboard running. Approved report jobs then
-fail visibly with a configuration message; they never pretend an email was sent.
-Settings load at process startup, so configure them before the demo.
+Click **Run demo**. It resets the run, injects growth into Greater Manchester at
+`r = 0.4/day`, and advances one simulated day per second. The default run has 28 days
+of history plus 14 future days; the clock starts on the final history day and
+automatically pauses at the end.
 
-### What approval does
+Without Gemini/SMTP credentials, the map, scores, forecasts and incident review
+still work. Approving a report with missing configuration produces a visible failure.
+Use **Dismiss** when demonstrating without sending.
 
-1. Stores an explicit operator decision; repeat approval returns HTTP 409.
-2. Queues report generation on a background thread.
-3. Sends only the detection-time observed snapshot to Gemini, never future telemetry,
-   injected outbreak ground truth or secrets.
-4. Validates structured JSON and builds a paginated PDF with an executive summary,
-   verified evidence table, AI assessment, recommendations and limitations. The narrative
-   is capped at 350 words with three or four prioritised proposed actions. Gemini is
-   instructed to name a responsible team, timeframe and concrete task for each,
-   covering signal verification, public-health liaison, NHS readiness and the next review.
-   These are advisory proposals, not clinical orders or actions already executed.
-5. Stores the PDF in SQLite and attaches it to the synthetic-exercise email.
+## Configuration
 
-The UI shows queued, generating, sending, accepted, failed or unconfirmed delivery.
-Generated PDFs are downloadable even if SMTP rejects the message. Definite failures
-have an operator retry button; a saved PDF is reused rather than regenerating.
-If the connection breaks during SMTP submission, delivery is **unconfirmed**, and retry
-is disabled to avoid duplicates. Check the recipient inbox or mail-server logs.
-SMTP acceptance is not proof of inbox delivery.
+Copy [.env.example](.env.example) to the **repository-root** `.env`. Never commit or
+share that file or your credentials. Do not put provider secrets in frontend code
+or `VITE_*` settings.
 
-Approval authorises generation and dispatch, not a preview of Gemini's eventual text.
-AI prose is advisory and may be inaccurate; measurements are rendered separately from
-the stored observed data. No stock or containment actions are executed.
+| Setting | Default / purpose |
+|---|---|
+| `GEMINI_API_KEY` | Required for approved report generation |
+| `GEMINI_MODEL` | `gemini-3.8-flash`; choose a model available to your account |
+| `REPORT_TIMEOUT_S` | `600` seconds (10 minutes); used for Gemini HTTP and SMTP timeouts |
+| `ALERT_RECIPIENT` | Defaults to the development inbox in the example; one address for all ICBs |
+| `SMTP_HOST`, `SMTP_PORT` | `smtp.gmail.com`, `587` |
+| `SMTP_SECURITY` | `starttls`; use `ssl` with the provider's implicit-TLS port if required |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Sender credentials; Gmail needs an app password |
+| `SMTP_FROM` | Sender address; if omitted, backend defaults to `SMTP_USERNAME` |
+| `BACKEND_PORT`, `FRONTEND_PORT` | `8000`, `5173`; helper/frontend configuration |
+| `DB_PATH` | `backend/biosecurity.sqlite3`, relative to the repository root |
+| `SIM_SEED`, `SIM_START_DATE` | `42`, `2026-09-01` |
+| `CLOCK_SECONDS_PER_DAY` | `2.0`; Run demo explicitly uses `1.0` |
 
-### Reset and persistence
+An explicitly blank `SMTP_FROM` in the example must be filled in; it is not the
+same as omitting the variable. Plaintext SMTP is not supported.
 
-A reset invalidates queued/in-progress generation from the old run before SMTP dispatch.
-An email already being submitted cannot be recalled. PDF/status records survive browser
-reloads, but the demo deliberately resets its simulation database on backend startup
-and on **Reset**. Download reports you want to retain. The schema version is bumped for
-the report workflow; older demo databases are rebuilt automatically.
+On native Windows, the manual Uvicorn command's `--port` must match `BACKEND_PORT`;
+the environment value does not override an explicit CLI port. Restart Vite after
+changing its port or backend-proxy settings.
 
-Replaying the simulation action log never calls Gemini or sends email. Asynchronous
-`REPORT_STATUS` events are excluded from deterministic replay comparisons.
+### Why a saved setting may not appear
 
-This is a **local demo**, with no production authentication, authority routing, durable
-mail queue or clinical validation. Do not expose it publicly or use real health data.
+The backend reads settings **once at import/startup**. They are not live-synchronised.
+Existing process environment variables take precedence over `.env` because
+`load_dotenv()` does not overwrite them. VS Code can also inject `.env` values when
+creating terminals (`python.terminal.useEnvFile` is enabled locally).
 
-## Validation
+If an old recipient or a 90-second timeout persists:
+
+1. Save the root `.env`.
+2. Stop the backend with **Ctrl+C**.
+3. Remove stale overrides in that same PowerShell terminal:
+
+   ```powershell
+   Remove-Item Env:REPORT_TIMEOUT_S, Env:ALERT_RECIPIENT -ErrorAction SilentlyContinue
+   ```
+
+4. Optionally verify the effective timeout without making any network requests:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -c "from backend.agent.reporting import DeliverySettings; print(DeliverySettings().timeout_s)"
+   ```
+
+5. Restart the backend and create a fresh incident.
+
+`--reload` normally watches Python files, not `.env`. An existing incident retains
+the recipient captured when it was opened; refreshing the browser does not rewrite it.
+An old failure message also remains a record of that failed attempt.
+
+**Restarting the backend or resetting the run clears demo incidents, events,
+decisions and saved PDFs. Download reports you need first.** Restarting is necessary
+to reload changed zone metadata; resetting alone does not reload the CSV.
+
+### Gemini or SMTP errors
+
+- A model can appear in metadata yet fail generation. For HTTP 404, choose an
+  account-supported `GEMINI_MODEL` and restart.
+- The 600-second HTTPX setting controls network timeouts; it is not a promise that
+  a PDF will be ready within exactly ten minutes, nor a provider availability guarantee.
+- Gmail requires 2-Step Verification and an app password, not your normal password.
+- Check the delivery address before approval. Use only an agreed, authorised inbox,
+  and do not send synthetic alerts to live public-health teams without permission.
+- `sent` means the SMTP server accepted the message, **not** confirmed inbox delivery.
+- A definite failure permits explicit retry. If a PDF already exists, retry reuses it.
+  **Delivery unconfirmed** disables retry to reduce duplicate-email risk.
+
+## How it works
+
+```text
+Seeded telemetry generator (full timeline kept in memory)
+    -> ingest one observed day into SQLite
+    -> baseline-normalised signals and current risk score
+    -> seven-day wastewater growth fit and 48-hour risk forecast
+    -> status transition and incident summary
+    -> operator approves
+    -> Gemini assessment -> validated JSON -> PDF -> SMTP
+    -> dashboard report status and download
+```
+
+The score weights are **50% wastewater, 35% A&E, 15% mobility**. Critical entry
+requires a projected score of at least 80 and `r_hat - 2 * se_r > 0`. Hysteresis
+and frozen baselines prevent an ongoing alert from explaining itself away.
+See [the complete derivation](docs/MATHS.md).
+
+Gemini receives the **detection-time observed snapshot**, not injected outbreak
+ground truth, future telemetry or SMTP credentials. Its narrative is capped at
+350 words with three or four proposed actions. The prompt requests an owner,
+timeframe and concrete next step for verification, public-health liaison and NHS
+readiness. The evidence table is rendered directly from stored measurements.
+AI text remains advisory and can be wrong; schema validation is not clinical validation.
+
+Approval authorises generation **and dispatch**, not review of Gemini's final text.
+Reset invalidates stale worker updates, but once sending begins a message may still
+be submitted. Reset cannot recall an email.
+
+## ICB coverage and validation
+
+[engine/zones.csv](engine/zones.csv) contains England's **36 ICBs effective 1 April
+2026**, checked against the [ONS register](https://geoportal.statistics.gov.uk/datasets/integrated-care-boards-april-2026-names-and-codes-in-en/explore).
+Runtime counts come from the roster, not a fixed constant. Pins and populations are
+approximate demo metadata, not official boundary geometry or population estimates.
+See [coverage details](docs/SPEC.md#icb-coverage).
+
+The previously measured 200-seed, 36-ICB validation found:
+
+- Median alert lead of **2 days**, mean **2.245 days**, relative to the current score
+  crossing 80; alerts were on or before that crossing in **100%** of seeds.
+- **One false CRITICAL zone-day in 165,600 clean zone-days.** The strict
+  zero-false-CRITICAL requirement therefore remains failing.
+
+These are synthetic benchmark results, **not clinical prediction accuracy or proof of
+lead time before diagnoses**. No thresholds or requirements were weakened to hide
+the failure. Full distributions and assumptions are in
+[measured results](docs/MATHS.md#8-measured-results).
+
+## Development and tests
+
+From the root, after installing development requirements:
 
 ```powershell
-.\.venv\Scripts\python -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python -m pytest backend\tests
-.\.venv\Scripts\python -m pytest engine\tests
+.\.venv\Scripts\python.exe -m pytest
+```
+
+The full suite includes the known failing clean-data requirement. To print the
+statistical benchmark output:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -s engine\tests\test_required.py
+```
+
+Frontend checks:
+
+```powershell
 Set-Location frontend
 npm test
-npm run lint
 npm run build
+npm run lint
 ```
 
-Tests inject fake report services or mock Gemini/SMTP: **no real emails or paid API
-calls**. PDF tests parse generated documents, not just mocked filenames.
+Python tests use fake Gemini/SMTP boundaries; frontend unit tests mock dependencies.
+They do not send real mail or make paid generation calls.
 
-For a manual, paid Gemini-only smoke check (no email is ever sent):
+For mocked browser layout checks, start the frontend, then:
 
 ```powershell
-.\.venv\Scripts\python scripts\llm_smoke.py --output incident-report.pdf
+Set-Location frontend
+$env:PLAYWRIGHT_BASE_URL = 'http://localhost:5173'
+npx playwright test responsive.spec.ts --project=chromium-720 --project=webkit-720
 ```
 
-With backend and frontend already running, `npx playwright test` in `frontend` tests
-Chromium and WebKit at three viewport sizes. The e2e suite dismisses notifications;
-it never approves real email. Screenshot output uses `SHOTS` or the default
-`frontend/e2e/screenshots`. Automatic server startup uses the Unix `dev.sh`; on Windows,
-start both servers manually first.
+If Playwright reports missing browsers, install them with
+`npx playwright install chromium webkit`. These layout tests mock API traffic and
+do not need the backend. The full suite (`npx playwright test`) also exercises the
+real demo backend, **resets its state**, and covers six browser/viewport projects;
+use a disposable run. On Windows start both servers and set `PLAYWRIGHT_BASE_URL`
+explicitly. Automatic startup uses the Unix helper.
 
-## Architecture and docs
+For a deliberately paid, manual Gemini-only check that never sends email:
 
-- `engine/`: seeded generator and pure statistical preprocessing/scoring/forecasting.
-- `backend/simulation.py`: observed-only ingestion, clock, transitions and operator decisions.
-- `backend/agent/executor.py`: incident creation and background report lifecycle.
-- `backend/agent/reporting.py`: Gemini structured output, ReportLab PDF and SMTP.
-- `frontend/`: React + TypeScript map, charts, incident summaries and notification approval.
-- The inventory API and seeded inventory database remain for compatibility; incidents
-  do not mutate stock. Retired allocation utilities and transfer-map rendering have
-  been removed.
+```powershell
+.\.venv\Scripts\python.exe scripts\llm_smoke.py --output incident-report.pdf
+```
 
-See [the maths](docs/MATHS.md), [demo checklist](docs/DEMO_CHECKLIST.md) and
-[talk track](docs/DEMO_SCRIPT.md). [The original spec](docs/SPEC.md) and earlier phase
-briefs describe historical stock/Claude/rideshare behaviour; this reporting workflow
-replaces that incident-response phase.
+Run that last command from the repository root. Reports/tests create local artifacts;
+do not commit generated reports, runtime databases or credentials.
+
+## Repository map
+
+- [engine/](engine/): pure generator, preprocessing, scoring, forecasting and status replay.
+- [backend/](backend/): API, simulation clock, SQLite, incidents and report delivery.
+- [frontend/](frontend/): dashboard, map, charts, controls and approval UI.
+- [scripts/](scripts/): optional plots, growth-rate analysis, map generation and report smoke check.
+- [docs/](docs/): current design, maths, validation and proposed production direction. Older screenshots
+  in [docs/figures/](docs/figures/) may depict retired UI; they are not the feature specification.
+
+The inventory API and seeded inventory tables remain for compatibility, but the
+current workflow never moves stock. Legacy allocation and transfer-map code are removed.
+
+## Deployment boundary
+
+This is a **local, single-process demonstrator**, not a production health service.
+It has no authentication/role-based approval, durable job queue, official
+recipient routing, clinical calibration or real-data integrations. Do not expose
+its mutation endpoints publicly. Use one backend worker: each process owns its own
+clock and startup resets the demo database. Production use needs validated data,
+security/privacy review, agreed escalation governance and durable delivery auditing.
