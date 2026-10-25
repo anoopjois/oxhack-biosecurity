@@ -31,7 +31,8 @@ async function expectFitsViewport(page: Page) {
 test('map displays the 36 current ICBs and selects a merged area', async ({ page, request }) => {
   await freshBackend(request)
   await page.goto('/')
-  await page.getByTestId('coach-dismiss').click()
+  await expect(page.getByTestId('clock-date')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Getting started' })).toHaveCount(0)
   await expect(page.locator('path.pin-ring')).toHaveCount(36)
   await expect(page.getByTestId('overview')).toContainText('Monitoring 36 NHS ICBs across England')
   for (const zone of ['central-east', 'essex', 'norfolk-and-suffolk',
@@ -49,8 +50,8 @@ test('map displays the 36 current ICBs and selects a merged area', async ({ page
 test('detection shows summary and explicit email approval, without hidden spike, stock or rideshare', async ({ page, request }, info) => {
   const initial = await freshBackend(request)
   await page.goto('/')
-  await expect(page.getByTestId('coach')).toBeVisible()
-  await page.getByTestId('coach-dismiss').click()
+  await expect(page.getByTestId('clock-date')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Getting started' })).toHaveCount(0)
   await page.getByTestId('spike').click()
   await page.locator(GM_RING).click()
   await page.getByTestId('spike-inject').click()
@@ -110,7 +111,8 @@ test('Run demo reaches the end without automatic emails and resets cleanly', asy
 test('keyboard shortcuts, theme and offline map remain available', async ({ page, request }) => {
   const initial = await freshBackend(request)
   await page.goto('/')
-  await page.getByTestId('coach-dismiss').click()
+  await expect(page.getByTestId('clock-date')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Getting started' })).toHaveCount(0)
   await page.locator('body').press('ArrowRight')
   await expect(page.getByTestId('clock-date')).toHaveAttribute('datetime', dateForDay(initial.first_date, 28))
   await page.locator('body').press('s')

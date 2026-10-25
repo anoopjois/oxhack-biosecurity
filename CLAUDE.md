@@ -393,7 +393,7 @@ Judges will ask whether an AI should move medical supplies on its own. The answe
 - Markers: Spike, Alert raised, Would have hit 80.
 
 **Controls**
-- First-load coach card ("Watch an outbreak unfold").
+- Open directly to the dashboard, without a first-load welcome popup. Run demo stays in the header.
 - End-of-timeline bar ("Timeline ended · Reset · Replay demo"); disabled controls
   explain why in a tooltip.
 - **Run demo:** reset, inject Greater Manchester at r = 0.4, play at 1 s/day.

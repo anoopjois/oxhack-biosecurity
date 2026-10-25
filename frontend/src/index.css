@@ -363,14 +363,6 @@ kbd {
 }
 .map-hint { background: var(--accent); color: #fff; }
 
-.coach {
-  position: absolute; z-index: 1100; left: 56px; top: var(--s3); width: min(30rem, calc(100% - 68px));
-  max-height: calc(100% - 96px); overflow-y: auto;
-  background: var(--surface); border-radius: var(--r); box-shadow: 0 10px 40px rgb(0 0 0 / 18%); padding: var(--s4) var(--s5);
-}
-.coach h2 { font-size: 1.2rem; margin-bottom: 6px; }
-.coach p { color: var(--ink-2); font-size: 0.95rem; }
-.coach-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); }
 .ended {
   position: absolute; z-index: 1100; left: 56px; top: var(--s3); max-width: calc(100% - 68px);
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); background: var(--inverse); color: var(--inverse-ink); border-radius: 10px;
@@ -525,6 +517,5 @@ kbd {
   .stat { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
   .stat dt { min-height: 0; }
   .stat dd { flex-shrink: 0; }
-  .coach { padding: var(--s3); }
   .map-legend { gap: var(--s2); padding: 6px 8px; font-size: 0.8rem; }
 }

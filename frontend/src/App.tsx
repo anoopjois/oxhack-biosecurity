@@ -16,8 +16,6 @@ import { DEMO_ZONE, useSimulation } from './state/useSimulation'
 import { useTheme } from './state/useTheme'
 import { useZoneHistory } from './state/useZoneHistory'
 
-const START_DAY = 27
-
 export default function App() {
   const sim = useSimulation()
   const theme = useTheme()
@@ -36,7 +34,6 @@ export default function App() {
   const [fellBack, setFellBack] = useState(false)
   const [outline, setOutline] = useState<FeatureCollection | null>(null)
   const [showLog, setShowLog] = useState(false)
-  const [coachDismissed, setCoachDismissed] = useState(false)
 
   useEffect(() => {
     fetch('/england.geojson').then((r) => r.json()).then(setOutline).catch(() => undefined)
@@ -58,11 +55,9 @@ export default function App() {
   const focusMarks = leadMarkers((focusHistory?.days ?? []).filter((d) => d.score !== null), CRITICAL_LINE)
 
   const speed = clock?.playing ? clock.seconds_per_day : speedPref
-  const showCoach = !coachDismissed && !!clock && clock.day === START_DAY && sim.events.length === 0
 
   const act = useCallback(async (fn: () => Promise<void>) => {
     setBusy(true)
-    setCoachDismissed(true)
     try {
       await fn()
     } catch (err) {
@@ -163,20 +158,6 @@ export default function App() {
                    mode={mode} fellBack={fellBack}
                    onFallBack={() => { setMode('vector'); setFellBack(true) }}
                    onZoneClick={onZoneClick} />
-          {showCoach && (
-            <div className="coach" role="dialog" aria-label="Getting started" data-testid="coach">
-              <h2>Viral outbreak risk, before the surge</h2>
-              <p>Press <b>★ Run demo</b> to follow a Greater Manchester outbreak scenario. BioSecure combines
-                wastewater viral load, A&E pressure and mobility into a 0–100 early-warning index and a
-                48-hour risk forecast. Review outbreak alerts and approve a PDF report for the configured recipient.
-                Nothing is sent automatically.</p>
-              <div className="coach-actions">
-                <button className="btn btn-primary" onClick={runDemo}>★ Run demo</button>
-                <button className="btn btn-ghost" onClick={() => setCoachDismissed(true)} data-testid="coach-dismiss">
-                  Explore on my own</button>
-              </div>
-            </div>
-          )}
           {clock?.at_end && (
             <div className="ended" role="status" data-testid="end-banner">
               Timeline ended on {shortDate(clock.sim_date)}.

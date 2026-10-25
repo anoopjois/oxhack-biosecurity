@@ -167,15 +167,15 @@ test('header dialogs stay on screen and scroll at phone, tablet and landscape si
   }
 })
 
-test('coach and end-of-timeline actions fit without covering map zoom controls', async ({ page }) => {
+test('dashboard opens without a welcome popup and end-of-timeline actions remain accessible', async ({ page }) => {
   const current = clock({ day: 27, sim_date: '2026-09-28' })
   await mockSimulation(page, current, [])
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height })
     await page.evaluate(() => window.scrollTo(0, 0))
-    await insideViewport(page.getByTestId('coach'))
-    await page.getByTestId('coach-dismiss').scrollIntoViewIfNeeded()
-    await page.getByTestId('coach-dismiss').click({ trial: true })
+    await expect(page.getByRole('dialog', { name: 'Getting started' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Explore on my own' })).toHaveCount(0)
+    await expect(page.getByTestId('run-demo')).toBeVisible()
     await page.getByTestId('zoom-in').click({ trial: true })
     await fitsHorizontally(page)
   }
