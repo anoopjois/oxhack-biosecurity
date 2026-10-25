@@ -36,6 +36,7 @@ from backend.agent.reporting import ReportService
 from backend.inventory import seed_inventory
 from engine.generator import SyntheticData, generate, inject_outbreak
 from engine.preprocess import VALUE_COLUMNS, to_daily
+from engine.scoring import score_contributions
 from engine.status import Status, replay_zone, score_zones
 from engine.zones import load_zones
 
@@ -94,6 +95,18 @@ def _clean(value):
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _contributions(result: dict) -> dict | None:
+    """Points each signal adds to today's score, or None while a zone has no score.
+
+    Uses the same z_W, z_E and M = mobility / 100 as the engine, so the parts sum to the score.
+    """
+    mobility = result["telemetry"]["mobility_density_score"]
+    if result["score"] is None or result["z_W"] is None or result["z_E"] is None or mobility is None:
+        return None
+    parts = score_contributions(result["z_W"], result["z_E"], mobility / 100.0)
+    return {"wastewater": parts.wastewater, "er": parts.er, "mobility": parts.mobility}
 
 
 class Simulation:
@@ -211,6 +224,7 @@ class Simulation:
             result["status"] = Status(result["status"]).value
             result["baseline_frozen"] = bool(result["baseline_frozen"])
             result["telemetry"] = {c: _clean(latest.at[row.zip_code, c]) for c in VALUE_COLUMNS}
+            result["contributions"] = _contributions(result)
             results[row.zip_code] = result
         return results
 

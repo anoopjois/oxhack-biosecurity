@@ -1,8 +1,8 @@
 import type { CSSProperties } from 'react'
 import type { Zone, ZoneHistory } from '../api/types'
 import { leadMarkers } from '../lib/behaviour'
-import { daysBetween, shortDate } from '../lib/format'
-import { countByStatus, RISK_FACTORS, RISK_SCORE_HELP, STATUS_META } from '../lib/status'
+import { compact, daysBetween, roundToTotal, shortDate } from '../lib/format'
+import { countByStatus, RISK_FACTORS, RISK_SCORE_HELP, signalLevel, STATUS_META } from '../lib/status'
 import { Info } from './Info'
 import { CRITICAL_LINE, ScoreChart } from './ScoreChart'
 import { StatusChip } from './StatusChip'
@@ -53,7 +53,7 @@ export function ZonePanel({ zones, selected, history, spikeDate, onSelect }: Pro
       </div>
       <ScoreChart days={days} spike={spikeDate} alert={alert} hit={cross} />
       <Caption alert={alert} hit={cross} status={zone.status} />
-      <RiskExplanation />
+      <AreaFactors zone={zone} />
     </section>
   )
 }
@@ -80,6 +80,53 @@ function Caption({ alert, hit, status }: { alert?: string; hit?: string; status:
     text = <>No critical outbreak alert. The dashed line estimates outbreak risk 48 hours ahead.</>
   }
   return <p className={`caption${lead ? ' caption-lead' : ''}`} data-testid="lead-note">{text}</p>
+}
+
+/** This area's latest reading for each signal and the points it adds to Outbreak risk now. */
+function AreaFactors({ zone }: { zone: Zone }) {
+  const { telemetry: t, contributions: points } = zone
+  const shown = points === null ? null : roundToTotal(RISK_FACTORS.map((f) => points[f.key]))
+  const ww = t.wastewater_copies_per_l, er = t.er_avg_wait_mins, mob = t.mobility_density_score
+  const readings: Record<(typeof RISK_FACTORS)[number]['key'], { value: string; context: string }> = {
+    wastewater: {
+      value: ww === null ? '—' : `${compact(ww)} copies/L`,
+      context: signalLevel(zone.z_W),
+    },
+    er: {
+      value: er === null ? '—' : `${er.toFixed(0)} min wait`,
+      context: zone.er_baseline === null ? signalLevel(zone.z_E) : `${signalLevel(zone.z_E)} · usually ${zone.er_baseline.toFixed(0)} min`,
+    },
+    mobility: {
+      value: mob === null ? '—' : `${mob.toFixed(0)} / 100 index`,
+      context: 'How much people mix locally',
+    },
+  }
+  return (
+    <div className="risk-explanation" data-testid="area-factors">
+      <h3>What’s driving this area’s risk</h3>
+      <ul className="risk-factors area-factors" aria-label={`${zone.zone_name} outbreak risk signals`}>
+        {RISK_FACTORS.map((factor, index) => {
+          const earned = points?.[factor.key] ?? null
+          const display = shown?.[index] ?? null
+          const reading = readings[factor.key]
+          return (
+            <li key={factor.key} data-testid={`factor-${factor.key}`}
+                style={{ '--w': `${earned === null ? 0 : Math.min(100, (earned / factor.points) * 100)}%` } as CSSProperties}>
+              <span className="factor-name">{factor.label}</span>
+              <b aria-label={display === null ? 'Points unavailable' : `${display} of ${factor.points} points`}>
+                {display ?? '—'}<small> / {factor.points} pts</small>
+              </b>
+              <span className="factor-reading"><strong>{reading.value}</strong> · {reading.context}</span>
+              <i className="factor-bar" aria-hidden />
+            </li>
+          )
+        })}
+      </ul>
+      <p>{points === null
+        ? 'Not enough signal history yet to score this area.'
+        : 'Points add up to Outbreak risk now. Each signal is compared with this area’s own recent baseline.'}</p>
+    </div>
+  )
 }
 
 function RiskExplanation() {

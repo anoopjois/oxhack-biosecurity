@@ -1,7 +1,16 @@
 import numpy as np
 
 from engine import config
-from engine.scoring import Baseline, baseline_at, combine, current_score, logistic, z_score
+from engine.scoring import Baseline, baseline_at, combine, current_score, logistic, score_contributions, z_score
+
+
+def test_contributions_are_weighted_points_that_sum_to_the_score():
+    for z_W, z_E, M in [(0.0, 0.0, 0.5), (2.0, 0.0, 0.2), (4.5, 3.0, 0.9), (-3.0, -2.0, 0.0)]:
+        parts = score_contributions(z_W, z_E, M)
+        assert parts.wastewater == 100 * config.W_WASTEWATER * logistic(z_W)
+        assert parts.er == 100 * config.W_ER * logistic(z_E)
+        assert parts.mobility == 100 * config.W_MOBILITY * M
+        assert np.isclose(parts.wastewater + parts.er + parts.mobility, combine(z_W, z_E, M))
 
 
 def test_logistic_centre():

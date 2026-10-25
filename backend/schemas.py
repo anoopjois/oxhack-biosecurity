@@ -22,6 +22,13 @@ class Telemetry(BaseModel):
     mobility_density_score: float | None
 
 
+class Contributions(BaseModel):
+    """Points each signal adds to the current score; they sum to `score`."""
+    wastewater: float
+    er: float
+    mobility: float
+
+
 class ZoneStatus(BaseModel):
     zip_code: str
     zone_name: str
@@ -40,6 +47,7 @@ class ZoneStatus(BaseModel):
     er_baseline: float | None
     baseline_frozen: bool
     telemetry: Telemetry
+    contributions: Contributions | None
 
 
 class PendingApproval(BaseModel):

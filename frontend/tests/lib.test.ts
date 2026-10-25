@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { leadMarkers, pollInterval, shortcutFor, shouldUseOffline } from '../src/lib/behaviour'
 import { buildFeed, isDefaultVisible } from '../src/lib/events'
-import { compact, doublingDays, longDate, shortDate, shortName } from '../src/lib/format'
+import { compact, doublingDays, longDate, roundToTotal, shortDate, shortName } from '../src/lib/format'
 import { arcPoints, arrowRotation } from '../src/lib/geo'
 import { countByStatus, PIN_DOT_RADIUS, PIN_RING_RADIUS, PIN_SELECTED_RADIUS, RISK_SCORE_HELP, STATUS_META } from '../src/lib/status'
 import { event } from './fixtures'
@@ -123,6 +123,15 @@ describe('behaviour', () => {
 })
 
 describe('formatting', () => {
+  it('rounds factor points so they add up to the rounded score', () => {
+    expect(roundToTotal([49.9, 22.7, 3.6])).toEqual([50, 23, 3])
+    expect(roundToTotal([6, 5, 9])).toEqual([6, 5, 9])
+    expect(roundToTotal([5.96, 4.17, 9])).toEqual([6, 4, 9])
+    expect(roundToTotal([33.4, 33.4, 33.2])).toEqual([34, 33, 33])
+    for (const parts of [[0.4, 0.4, 0.4], [12.5, 12.5, 0], [49.99, 34.99, 14.99]]) {
+      expect(roundToTotal(parts).reduce((a, b) => a + b, 0)).toBe(Math.round(parts.reduce((a, b) => a + b, 0)))
+    }
+  })
   it('formats dates, numbers and names for the projector', () => {
     expect(longDate('2026-10-02')).toBe('Fri 2 Oct 2026')
     expect(shortDate('2026-09-28')).toBe('28 Sep')

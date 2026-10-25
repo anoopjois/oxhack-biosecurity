@@ -23,6 +23,13 @@ export interface Telemetry {
   mobility_density_score: number | null
 }
 
+/** Points each signal adds to the current score (they sum to `score`). */
+export interface Contributions {
+  wastewater: number
+  er: number
+  mobility: number
+}
+
 export interface Zone {
   zip_code: string
   zone_name: string
@@ -41,6 +48,7 @@ export interface Zone {
   er_baseline: number | null
   baseline_frozen: boolean
   telemetry: Telemetry
+  contributions: Contributions | null
 }
 
 /** A report notification waiting for explicit operator approval. */

@@ -45,6 +45,14 @@ test('map displays the 36 current ICBs and selects a merged area', async ({ page
   await page.locator('path.pin-ring[data-zone="central-east"]').click()
   await expect(page.getByTestId('zone-panel')).toContainText('Central East')
   await expect(page.getByTestId('score-chart')).toBeVisible()
+  const factors = page.getByTestId('area-factors')
+  await expect(factors).toContainText('What’s driving this area’s risk')
+  await expect(page.getByTestId('factor-wastewater')).toContainText(/copies\/L/)
+  await expect(page.getByTestId('factor-er')).toContainText(/min wait · .* · usually \d+ min/)
+  await expect(page.getByTestId('factor-mobility')).toContainText(/\d+ \/ 100 index/)
+  await expect(factors).not.toContainText(/50%|35%|15%/)
+  await page.getByRole('button', { name: 'Back to overview' }).click()
+  await expect(page.getByTestId('risk-explanation')).toContainText('Wastewater viral load50%')
 })
 
 test('detection shows summary and explicit email approval, without hidden spike, stock or rideshare', async ({ page, request }, info) => {

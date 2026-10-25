@@ -20,10 +20,22 @@ export const PIN_RING_RADIUS = 8
 export const PIN_SELECTED_RADIUS = 12.5
 
 export const RISK_FACTORS = [
-  { label: 'Wastewater viral load', weight: '50%' },
-  { label: 'A&E waiting-time pressure', weight: '35%' },
-  { label: 'Mobility & crowding', weight: '15%' },
+  { key: 'wastewater', label: 'Wastewater viral load', weight: '50%', points: 50 },
+  { key: 'er', label: 'A&E waiting-time pressure', weight: '35%', points: 35 },
+  { key: 'mobility', label: 'Mobility & crowding', weight: '15%', points: 15 },
 ] as const
+
+/**
+ * Plain-language level for a signal's z-score against the area's own recent baseline.
+ * z = 2 is the logistic centre: from there a signal earns at least half its points.
+ */
+export function signalLevel(z: number | null): string {
+  if (z === null) return 'No baseline yet'
+  if (z >= 2) return 'Well above usual'
+  if (z >= 1) return 'Above usual'
+  if (z > -1) return 'Typical'
+  return 'Below usual'
+}
 
 /** Explain the index, its inputs and the alert rules without implying a diagnosis. */
 export const RISK_SCORE_HELP =

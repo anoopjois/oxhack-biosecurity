@@ -374,12 +374,16 @@ Judges will ask whether an AI should move medical supplies on its own. The answe
   at the donor end. After 20 s the map flies back.
 
 **Zone card**
-- Stats: Risk now, Risk in 48h, Doubling, A&E wait (with "usual"), each with a "?"
+- Stats: Outbreak risk now, Outbreak risk in 48h, Viral doubling time, each with a "?"
   tooltip.
 - Custom SVG chart: Risk now (solid black) vs "Forecast, 48 hours ahead" (dashed
   blue), with Spike and Alert pills, a shaded lead band and a hover readout.
 - A prominent lead caption.
-- With nothing selected: an England overview.
+- "What's driving this area's risk": each signal's latest reading, its level against the
+  area's own baseline, and the points it adds (`map-status` `contributions`, from
+  `engine.scoring.score_contributions`; they sum to the score and are displayed with
+  largest-remainder rounding so they add up to the shown score).
+- With nothing selected: an England overview, which shows the factor weights instead.
 
 **Incident cards** (`lib/incidents.ts`)
 - One card per outbreak, routed by zone and then by episode id, so simultaneous

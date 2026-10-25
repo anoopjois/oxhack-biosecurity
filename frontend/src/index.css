@@ -547,7 +547,14 @@ kbd {
 .risk-factors { gap: var(--s2); }
 .risk-factors li { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
 .factor-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--accent-soft); overflow: hidden; }
-.factor-bar::after { content: ""; display: block; width: var(--w); height: 100%; border-radius: inherit; background: var(--accent); opacity: 0.75; }
+.factor-bar::after { content: ""; display: block; width: var(--w); height: 100%; border-radius: inherit; background: var(--accent); opacity: 0.75; transition: width 0.6s var(--ease); }
+.area-factors { gap: var(--s3); }
+.area-factors li { row-gap: 2px; }
+.area-factors .factor-name { font-weight: 650; color: var(--ink); }
+.area-factors b { color: var(--accent-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.area-factors b small { color: var(--muted); font-weight: 500; font-size: 0.75rem; }
+.factor-reading { grid-column: 1 / -1; color: var(--ink-2); font-size: 0.8rem; }
+.factor-reading strong { color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
 
 .link-row { width: calc(100% + 16px); margin: 0 -8px; padding: 6px 8px; border-radius: 8px; }
 .link-row:hover { background: var(--surface-2); color: var(--ink); }

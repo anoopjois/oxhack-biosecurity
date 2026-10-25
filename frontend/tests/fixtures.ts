@@ -9,7 +9,8 @@ export const zone = (zip: string, over: Partial<Zone> = {}): Zone => ({
   zip_code: zip, zone_name: zip === 'greater-manchester' ? 'Greater Manchester' : zip, region: 'North West',
   latitude: 53.5, longitude: -2.25, population: 2_900_000, status: 'SAFE', score: 20, projected_score: 22,
   z_W: 0, z_E: 0, r_hat: 0.01, se_r: 0.05, doubling_days: 69, er_baseline: 64, baseline_frozen: false,
-  telemetry: { wastewater_copies_per_l: 1e5, er_avg_wait_mins: 69, mobility_density_score: 60 }, ...over,
+  telemetry: { wastewater_copies_per_l: 1e5, er_avg_wait_mins: 69, mobility_density_score: 60 },
+  contributions: { wastewater: 6, er: 5, mobility: 9 }, ...over,
 })
 
 let nextId = 1
