@@ -30,6 +30,19 @@ class ScoreParts:
     score: float
 
 
+@dataclass(frozen=True)
+class Contributions:
+    """Points each signal adds to the score (before clipping); they sum to the score.
+
+        wastewater = 100 * W_WASTEWATER * s(z_W)   (at most 50)
+        er         = 100 * W_ER         * s(z_E)   (at most 35)
+        mobility   = 100 * W_MOBILITY   * M        (at most 15)
+    """
+    wastewater: float
+    er: float
+    mobility: float
+
+
 def baseline_at(x: np.ndarray, y: np.ndarray, er: np.ndarray, t: int) -> Baseline | None:
     """Mean and sample std (ddof=1) over days t-17..t-4 inclusive (14 days).
 
@@ -62,15 +75,23 @@ def logistic(z: float) -> float:
     return 1.0 / (1.0 + np.exp(-(z - config.LOGISTIC_CENTRE)))
 
 
+def score_contributions(z_W: float, z_E: float, M: float) -> Contributions:
+    """Each signal's weighted points: 100 * weight * (s(z) or M). See Contributions."""
+    return Contributions(
+        wastewater=100.0 * config.W_WASTEWATER * logistic(z_W),
+        er=100.0 * config.W_ER * logistic(z_E),
+        mobility=100.0 * config.W_MOBILITY * M,
+    )
+
+
 def combine(z_W: float, z_E: float, M: float) -> float:
     """score = 100 * (0.5 s(z_W) + 0.35 s(z_E) + 0.15 M), clipped to [0, 100].
 
     Wastewater alone can contribute at most 50 + 15 M <= 65 points, so reaching
     80 needs the ER signal to be elevated too.
     """
-    raw = 100.0 * (config.W_WASTEWATER * logistic(z_W)
-                   + config.W_ER * logistic(z_E)
-                   + config.W_MOBILITY * M)
+    parts = score_contributions(z_W, z_E, M)
+    raw = parts.wastewater + parts.er + parts.mobility
     return float(np.clip(raw, config.SCORE_MIN, config.SCORE_MAX))
 
 

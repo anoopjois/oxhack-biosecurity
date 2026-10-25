@@ -36,6 +36,19 @@ export function compact(n: number): string {
   return String(Math.round(n))
 }
 
+/**
+ * Round parts to whole numbers that still add up to the rounded total (largest remainder),
+ * so displayed points never disagree with the displayed score: [49.9, 22.7, 3.6] -> [50, 23, 3].
+ */
+export function roundToTotal(parts: number[]): number[] {
+  const target = Math.round(parts.reduce((sum, p) => sum + p, 0))
+  const rounded = parts.map(Math.floor)
+  const deficit = target - rounded.reduce((sum, p) => sum + p, 0)
+  const order = parts.map((p, i) => ({ i, rest: p - Math.floor(p) })).sort((a, b) => b.rest - a.rest || a.i - b.i)
+  for (let k = 0; k < deficit; k++) rounded[order[k % order.length].i] += 1
+  return rounded
+}
+
 export const score = (x: number | null | undefined) => (x === null || x === undefined ? '—' : x.toFixed(1))
 
 /** Doubling time ln2 / r, in days. */

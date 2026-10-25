@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from backend import config
 from backend.config import Settings
 from backend.main import create_app
+from engine import config as engine_config
 from engine.preprocess import to_daily
 from engine.status import score_zones
 from engine.zones import load_zones
@@ -39,6 +40,12 @@ def test_starts_at_end_of_history(client):
     facilities = client.get(f"{API}/inventory").json()["facilities"]
     assert {f["zip_code"]: f["zone_name"] for f in facilities} == expected_names
     assert all(z["status"] != "INSUFFICIENT_DATA" for z in status["zones"])
+    for zone in status["zones"]:
+        points = zone["contributions"]
+        assert set(points) == {"wastewater", "er", "mobility"}
+        assert np.isclose(sum(points.values()), zone["score"])
+        assert np.isclose(points["mobility"], 100 * engine_config.W_MOBILITY
+                          * zone["telemetry"]["mobility_density_score"] / 100)
 
     conn = client.app.state.sim.read_connection()
     count, max_date = conn.execute("SELECT COUNT(*), MAX(timestamp) FROM telemetry_logs").fetchone()

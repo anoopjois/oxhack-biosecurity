@@ -173,9 +173,34 @@ describe('Other panels', () => {
     expect(within(panel).getByText('Viral doubling time')).toBeInTheDocument()
     expect(within(panel).getByText('69.0')).toBeInTheDocument()
     expect(within(panel).queryByText('A&E wait')).not.toBeInTheDocument()
-    expect(within(panel).getByTestId('risk-explanation')).toHaveTextContent('not an infection probability')
+    expect(within(panel).queryByTestId('risk-explanation')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'About Outbreak risk now' }))
     expect(screen.getByRole('tooltip')).toHaveTextContent(RISK_SCORE_HELP)
+  })
+  it('shows a selected area’s signal readings and points instead of the weights', () => {
+    render(<ZonePanel zones={[zone('a', {
+      score: 71, z_W: 3.4, z_E: 1.2, er_baseline: 52,
+      telemetry: { wastewater_copies_per_l: 1_240_000, er_avg_wait_mins: 63.4, mobility_density_score: 72 },
+      contributions: { wastewater: 40.1, er: 20.2, mobility: 10.8 },
+    })]} selected="a" history={null} onSelect={noop} />)
+    const factors = screen.getByTestId('area-factors')
+    expect(factors).toHaveTextContent('What’s driving this area’s risk')
+    expect(screen.getByTestId('factor-wastewater')).toHaveTextContent('Wastewater viral load40 / 50 pts1.2M copies/L · Well above usual')
+    expect(screen.getByTestId('factor-er')).toHaveTextContent('A&E waiting-time pressure20 / 35 pts63 min wait · Above usual · usually 52 min')
+    expect(screen.getByTestId('factor-mobility')).toHaveTextContent('Mobility & crowding11 / 15 pts72 / 100 index')
+    expect(screen.getByLabelText('40 of 50 points')).toBeInTheDocument()
+    expect(factors).not.toHaveTextContent(/50%|35%|15%/)
+    expect(screen.getByTestId('factor-wastewater').style.getPropertyValue('--w')).toBe('80.2%')
+  })
+  it('shows dashes when a selected area cannot be scored yet', () => {
+    render(<ZonePanel zones={[zone('a', {
+      status: 'INSUFFICIENT_DATA', score: null, z_W: null, z_E: null, er_baseline: null, contributions: null,
+      telemetry: { wastewater_copies_per_l: null, er_avg_wait_mins: null, mobility_density_score: null },
+    })]} selected="a" history={null} onSelect={noop} />)
+    expect(screen.getByTestId('factor-wastewater')).toHaveTextContent('—')
+    expect(screen.getByTestId('factor-wastewater')).toHaveTextContent('No baseline yet')
+    expect(screen.getAllByLabelText('Points unavailable')).toHaveLength(3)
+    expect(screen.getByTestId('area-factors')).toHaveTextContent('Not enough signal history yet')
   })
   it('shows today, alert, spike and score crossing markers', () => {
     render(<Timeline clock={clock({ day: 33, sim_date: '2026-10-04' })} spike="2026-09-28" alert="2026-10-02" hit="2026-10-04" />)
