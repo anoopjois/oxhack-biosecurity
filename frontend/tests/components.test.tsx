@@ -25,7 +25,7 @@ describe('Header', () => {
     expect(screen.getByText('Fri 2 Oct 2026')).toBeInTheDocument()
     expect(screen.getByTestId('clock-date')).toHaveAttribute('datetime', '2026-10-02')
     expect(screen.getByText('Viral outbreak early warning')).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'BioSecure' })).toHaveAttribute('src', expect.stringContaining('biosecure-logo.jpeg'))
+    expect(screen.getByRole('img', { name: 'BioSecure' })).toHaveAttribute('src', expect.stringContaining('biosecure-logo.png'))
     expect(screen.queryByText('BioSecure', { exact: true })).not.toBeInTheDocument()
     expect(document.querySelector('.brand-dot')).not.toBeInTheDocument()
     expect(screen.queryByTestId('poc-badge')).not.toBeInTheDocument()
