@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { Zone, ZoneHistory } from '../api/types'
 import { leadMarkers } from '../lib/behaviour'
 import { daysBetween, shortDate } from '../lib/format'
@@ -87,7 +88,9 @@ function RiskExplanation() {
       <h3>What drives viral outbreak risk?</h3>
       <ul className="risk-factors" aria-label="Outbreak risk score weights">
         {RISK_FACTORS.map((factor) => (
-          <li key={factor.label}><span>{factor.label}</span><b>{factor.weight}</b></li>
+          <li key={factor.label} style={{ '--w': factor.weight } as CSSProperties}>
+            <span>{factor.label}</span><b>{factor.weight}</b><i className="factor-bar" aria-hidden />
+          </li>
         ))}
       </ul>
       <p>A 0–100 early-warning index. Higher scores mean stronger outbreak signals, not an infection probability or confirmed cases.</p>
