@@ -11,6 +11,14 @@ Donors are zones whose status is SAFE right now, nearest first (haversine distan
 zip_code breaks ties). Greedy fill: each donor gives min(remaining deficit, surplus)
 of every item, using at most MAX_DONORS donors. A donor therefore never drops below
 F_j,k, and every unit leaving a donor arrives at the target (total stock is conserved).
+
+Donor reserve, in days of normal use (D = NORMAL_STOCK_DAYS):
+
+    daily use     u_j,k = l_k * P_j / D            (normal stock l_k * P_j lasts D days)
+    reserve       R_j   = min_k S_j,k / u_j,k      (days until the first item runs out)
+
+Since S_j,k >= F_j,k >= SAFETY_FRACTION * l_k * P_j after giving, every donor keeps
+R_j >= SAFETY_FRACTION * D days: the shortage is not simply moved somewhere else.
 """
 
 import math
@@ -81,6 +89,22 @@ def surplus(hub: Hub) -> Stock:
     """U_k = max(0, S_k - F_k): what a donor can give without going below its safety level."""
     floor = safety_level(hub.population)
     return {k: max(0, hub.stock[k] - floor[k]) for k in ITEMS}
+
+
+def daily_use(population: int) -> dict[str, float]:
+    """u_k = l_k * P / NORMAL_STOCK_DAYS: a hub's normal use of item k per day."""
+    return {k: level * population / config.NORMAL_STOCK_DAYS for k, level in STOCK_LEVELS.items()}
+
+
+def reserve_days(stock: Stock, population: int) -> float:
+    """R = min_k S_k / u_k: how many days of normal use the stock covers (its scarcest item)."""
+    use = daily_use(population)
+    return min(stock[k] / use[k] for k in ITEMS)
+
+
+def reserve_floor_days() -> float:
+    """SAFETY_FRACTION * NORMAL_STOCK_DAYS: the reserve no donor can drop below (R >= this)."""
+    return config.SAFETY_FRACTION * config.NORMAL_STOCK_DAYS
 
 
 def distance(a: Hub, b: Hub) -> float:

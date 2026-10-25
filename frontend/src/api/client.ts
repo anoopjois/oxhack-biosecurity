@@ -42,4 +42,6 @@ export const api = {
   pause: () => post<{ clock: Clock }>('/clock/pause'),
   step: () => post<{ clock: Clock }>('/clock/step'),
   reset: () => post<{ clock: Clock }>('/clock/reset'),
+  approve: (episodeId: number) => post<{ clock: Clock }>(`/episodes/${episodeId}/approve`),
+  override: (episodeId: number) => post<{ clock: Clock }>(`/episodes/${episodeId}/override`),
 }

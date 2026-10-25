@@ -4,11 +4,19 @@ Runs inside Simulation.step(), under the lock and inside the tick's transaction,
 allocations are deterministic and reproducible. Only the LLM briefing runs afterwards.
 
 Per new CRITICAL episode (highest projected score first):
-    1. allocate from the nearest SAFE hubs and apply the transfers (stock is conserved);
-    2. AGENT_ALLOCATION event;
+    1. allocate from the nearest SAFE hubs and store the plan (stock does not move yet);
+    2. AGENT_ALLOCATION event: the proposal;
+       with no approval step (or nothing to move), AGENT_DECISION follows at once;
     3. AGENT_DIRECTIVE event with the rule-based briefing;
     4. RIDESHARE_WEBHOOK event (pooled rides disabled);
     5. queue an LLM job, if a writer is configured.
+A pending plan is decided later by `decide` (operator approve/override, or the timeout):
+approving moves the stock (conserved), overriding moves nothing. Either way an
+AGENT_DECISION event is written.
+
+Same-tick proposals reserve stock: each plan is computed as if every pending plan were
+already applied. Donors only ever give, so approving or overriding any subset of pending
+plans still keeps every donor at or above its safety level.
 When an episode closes (CRITICAL -> anything else): pooled rides are re-enabled.
 """
 
@@ -19,7 +27,8 @@ import pandas as pd
 from backend import config
 from backend.agent import rideshare as rs
 from backend.agent.allocation import (
-    ITEMS, Allocation, Hub, allocate, coverage_pct, distance, order_alerts,
+    ITEMS, Allocation, Hub, allocate, coverage_pct, distance, order_alerts, reserve_days,
+    reserve_floor_days, safety_level,
 )
 from backend.agent.briefing import validate_briefing
 from backend.agent.llm import DirectiveWriter, LLMOutcome
@@ -28,6 +37,7 @@ from backend.agent.worker import LLMJob, LLMWorker, ResultCallback
 from engine import config as engine_config
 
 CRITICAL = "CRITICAL"
+PENDING, APPROVED, OVERRIDDEN = "pending", "approved", "overridden"
 ITEM_LABELS = {"ppe_units": "PPE", "antiviral_doses": "antivirals", "vaccine_doses": "vaccines"}
 
 
@@ -51,8 +61,10 @@ def directive_message(source: str, zone_name: str, headline: str) -> str:
 
 class Agent:
     def __init__(self, zones: pd.DataFrame, rideshare: rs.RideshareClient,
-                 writer: DirectiveWriter | None, on_llm_result: ResultCallback):
+                 writer: DirectiveWriter | None, on_llm_result: ResultCallback,
+                 approval_timeout_s: float = config.APPROVAL_TIMEOUT_S):
         self.zones = {z.zip_code: z for z in zones.itertuples()}
+        self.approval_timeout_s = approval_timeout_s  # 0: no approval step, stock moves in the tick
         self.rideshare = rideshare
         self.worker = LLMWorker(writer, on_llm_result) if writer is not None else None
 
@@ -69,12 +81,28 @@ class Agent:
                 jobs.append(job)
         return jobs
 
+    @property
+    def approval_required(self) -> bool:
+        return self.approval_timeout_s > 0
+
+    def _stock(self, conn) -> dict[str, dict[str, int]]:
+        return {row["zip_code"]: {k: int(row[k]) for k in ITEMS}
+                for row in conn.execute(f"SELECT zip_code, {', '.join(ITEMS)} FROM hospital_inventories")}
+
     def _hubs(self, conn, results: dict[str, dict]) -> dict[str, Hub]:
+        """Every hub with its stock as it will be once all pending plans are approved."""
+        stock = self._stock(conn)
+        for (plan,) in conn.execute("SELECT plan FROM agent_episodes WHERE decision = ?", (PENDING,)):
+            plan = json.loads(plan)
+            for t in plan["transfers"]:
+                for k in ITEMS:
+                    stock[t["donor"]][k] -= t[k]
+                    stock[plan["target"]][k] += t[k]
         hubs = {}
-        for row in conn.execute(f"SELECT zip_code, {', '.join(ITEMS)} FROM hospital_inventories"):
-            z = self.zones[row["zip_code"]]
-            hubs[z.zip_code] = Hub(z.zip_code, float(z.latitude), float(z.longitude), int(z.population),
-                                   results[z.zip_code]["status"], {k: int(row[k]) for k in ITEMS})
+        for zip_code, s in stock.items():
+            z = self.zones[zip_code]
+            hubs[zip_code] = Hub(zip_code, float(z.latitude), float(z.longitude), int(z.population),
+                                 results[zip_code]["status"], s)
         return hubs
 
     def _er_baseline(self, sim, zip_code: str, day: int) -> float:
@@ -94,22 +122,28 @@ class Agent:
         hubs = self._hubs(conn, results)
         allocation = allocate(hubs[zip_code], list(hubs.values()))
 
+        plan = {"target": zip_code,
+                "transfers": [{"donor": t.donor, "distance_km": t.distance_km, **t.quantities}
+                              for t in allocation.transfers]}
         cur = conn.execute(
             """INSERT INTO agent_episodes (zip_code, status_event_id, opened_date, context, llm_status,
-               directive_source) VALUES (?, ?, ?, '{}', ?, 'template')""",
+               directive_source, plan, decision) VALUES (?, ?, ?, '{}', ?, 'template', ?, ?)""",
             (zip_code, transition.event_id, sim.iso(day),
-             "pending" if self.worker else "not_configured"))
+             "pending" if self.worker else "not_configured", json.dumps(plan), PENDING))
         episode_id = cur.lastrowid
-        self._apply(conn, sim.iso(day), episode_id, allocation)
 
-        context = self._context(sim, day, transition, results, hubs, allocation)
+        # A human decides only when there is something to move and the approval step is on.
+        needs_approval = self.approval_required and bool(allocation.transfers)
+        context = self._context(sim, day, transition, results, hubs, allocation, needs_approval)
         conn.execute("UPDATE agent_episodes SET context = ? WHERE episode_id = ?",
                      (json.dumps(context), episode_id))
 
         name = self.zones[zip_code].zone_name
         sim._add_event(day, "AGENT_ALLOCATION", "critical", zip_code,
                        self._allocation_message(name, allocation, context),
-                       self._allocation_payload(episode_id, allocation, context))
+                       self._allocation_payload(episode_id, allocation, context, hubs))
+        if not needs_approval:
+            self.decide(sim, day, episode_id, APPROVED, "policy")
 
         briefing, _ = validate_briefing(build_template(context), context)  # the template must pass too
         sim._add_event(day, "AGENT_DIRECTIVE", "warning", zip_code,
@@ -128,25 +162,61 @@ class Agent:
                         "request": request, "response": response})
         return LLMJob(episode_id, context) if self.worker else None
 
-    def _apply(self, conn, iso_date: str, episode_id: int, allocation: Allocation) -> None:
-        """Move stock: -q at each donor, +q at the target, all in the tick's transaction."""
-        for t in allocation.transfers:
+    def decide(self, sim, day: int, episode_id: int, decision: str, by: str) -> dict:
+        """Settle a pending plan: APPROVED moves its stock, OVERRIDDEN moves nothing.
+
+        `by` is operator | timeout | policy. Runs inside the caller's transaction and writes
+        the AGENT_DECISION event, which it returns.
+        """
+        conn = sim.conn
+        row = conn.execute("SELECT zip_code, plan FROM agent_episodes WHERE episode_id = ?",
+                           (episode_id,)).fetchone()
+        plan, zip_code = json.loads(row["plan"]), row["zip_code"]
+        moved = self._apply(conn, sim.iso(day), episode_id, plan) if decision == APPROVED else []
+        conn.execute("UPDATE agent_episodes SET decision = ?, decided_by = ?, decided_date = ? "
+                     "WHERE episode_id = ?", (decision, by, sim.iso(day), episode_id))
+        name = self.zones[zip_code].zone_name
+        target_after = self._stock(conn)[zip_code]
+        return sim._add_event(
+            day, "AGENT_DECISION", "warning" if decision == OVERRIDDEN else "info", zip_code,
+            self._decision_message(name, decision, by, len(moved)),
+            {"episode_id": episode_id, "decision": decision, "by": by, "target": zip_code,
+             "transfers": moved, "target_after": target_after,
+             "reserve_floor_days": round(reserve_floor_days(), 1)})
+
+    def _apply(self, conn, iso_date: str, episode_id: int, plan: dict) -> list[dict]:
+        """Move stock: -q at each donor, +q at the target. Returns what moved, with each
+        donor's stock and reserve (days of normal use) after giving."""
+        moved = []
+        for t in plan["transfers"]:
+            donor = t["donor"]
+            population = int(self.zones[donor].population)
+            quantities = [t[k] for k in ITEMS]
             set_minus = ", ".join(f"{k} = {k} - ?" for k in ITEMS)
             set_plus = ", ".join(f"{k} = {k} + ?" for k in ITEMS)
-            quantities = [t.quantities[k] for k in ITEMS]
             conn.execute(f"UPDATE hospital_inventories SET {set_minus} WHERE zip_code = ?",
-                         (*quantities, t.donor))
+                         (*quantities, donor))
             conn.execute(f"UPDATE hospital_inventories SET {set_plus} WHERE zip_code = ?",
-                         (*quantities, allocation.target))
+                         (*quantities, plan["target"]))
+            donor_after = self._stock(conn)[donor]
+            floor = safety_level(population)
+            # Guaranteed by the stock reservations in _hubs; a failure here aborts the transaction.
+            assert all(donor_after[k] >= floor[k] for k in ITEMS), f"{donor} below its safety level"
             conn.execute(
                 """INSERT INTO transfers (episode_id, sim_date, donor_zip, target_zip, distance_km,
                    ppe_units, antiviral_doses, vaccine_doses,
                    donor_ppe_after, donor_antiviral_after, donor_vaccine_after)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (episode_id, iso_date, t.donor, allocation.target, round(t.distance_km, 1),
-                 *quantities, *[t.donor_after[k] for k in ITEMS]))
+                (episode_id, iso_date, donor, plan["target"], round(t["distance_km"], 1),
+                 *quantities, *[donor_after[k] for k in ITEMS]))
+            moved.append({"donor": donor, "donor_name": self.zones[donor].zone_name,
+                          "distance_km": round(t["distance_km"], 1),
+                          **{k: t[k] for k in ITEMS}, "donor_after": donor_after,
+                          "reserve_days_after": round(reserve_days(donor_after, population), 1)})
+        return moved
 
-    def _context(self, sim, day, transition, results, hubs, allocation: Allocation) -> dict:
+    def _context(self, sim, day, transition, results, hubs, allocation: Allocation,
+                 needs_approval: bool) -> dict:
         """Everything the briefing may say, already rounded the way the text will show it."""
         zip_code = transition.zip_code
         z = self.zones[zip_code]
@@ -187,12 +257,17 @@ class Agent:
                 "stock_after": allocation.target_after,
                 "deficit": allocation.deficit,
                 "transfers": [{"donor": t.donor, "donor_name": self.zones[t.donor].zone_name,
-                               "distance_km": round(t.distance_km), **t.quantities}
+                               "distance_km": round(t.distance_km), **t.quantities,
+                               "reserve_days_after": round(
+                                   reserve_days(t.donor_after, hubs[t.donor].population), 1)}
                               for t in allocation.transfers],
+                "reserve_floor_days": round(reserve_floor_days(), 1),
                 "transferred": moved,
                 "uncovered": allocation.uncovered,
                 "coverage_pct": {k: coverage_pct(allocation.deficit[k], moved[k]) for k in ITEMS},
             },
+            # The stock moves once an operator approves, or by itself after timeout_s seconds.
+            "approval": {"required": needs_approval, "timeout_s": round(self.approval_timeout_s)},
             "rideshare": {"action": "pooled rides disabled", "radius_km": round(config.RIDESHARE_RADIUS_KM),
                           "review_date": sim.iso(day + config.RIDESHARE_REVIEW_DAYS),
                           "review_label": date_label(review, with_year=False)},
@@ -205,8 +280,12 @@ class Agent:
             hubs = ", ".join(f"{t['donor_name']} ({t['distance_km']} km)" for t in alloc["transfers"])
             covered = " · ".join(f"{ITEM_LABELS[k]} {alloc['coverage_pct'][k]}%" for k in ITEMS)
             count = len(allocation.transfers)
-            return (f"Autobalancer → {name}: {amounts} from {count} hub{'s' if count != 1 else ''}: "
-                    f"{hubs}. Deficit covered: {covered}.")
+            approval = ctx["approval"]
+            verb = "proposes " if approval["required"] else ""
+            ask = (f" Auto-approves in {approval['timeout_s']} s unless an operator objects."
+                   if approval["required"] else "")
+            return (f"Autobalancer → {name}: {verb}{amounts} from {count} hub{'s' if count != 1 else ''}: "
+                    f"{hubs}. Deficit covered: {covered}.{ask}")
         if any(allocation.deficit.values()):
             short = " · ".join(f"{allocation.uncovered[k]:,} {ITEM_LABELS[k]}" for k in ITEMS
                                if allocation.uncovered[k] > 0)
@@ -214,13 +293,32 @@ class Agent:
                     f"level; shortfall of {short} escalated.")
         return f"Autobalancer → {name}: hub already at the {config.SURGE_MULTIPLIER:g}× surge level; no transfers needed."
 
-    def _allocation_payload(self, episode_id: int, allocation: Allocation, ctx: dict) -> dict:
+    def _decision_message(self, name: str, decision: str, by: str, count: int) -> str:
+        hubs = f"{count} hub{'s' if count != 1 else ''}"
+        if decision == OVERRIDDEN:
+            return f"Operator overrode the stock move to {name}: no stock moved"
+        if by == "operator":
+            return f"Operator approved the stock move to {name}: stock sent from {hubs}"
+        if by == "timeout":
+            return (f"Stock move to {name} auto-approved: no objection within "
+                    f"{self.approval_timeout_s:g} s; stock sent from {hubs}")
+        return f"Stock move to {name} executed: stock sent from {hubs}"
+
+    def _allocation_payload(self, episode_id: int, allocation: Allocation, ctx: dict,
+                            hubs: dict[str, Hub]) -> dict:
         return {
             "episode_id": episode_id, "target": allocation.target,
+            "approval": ctx["approval"],
+            "reserve_floor_days": ctx["allocation"]["reserve_floor_days"],
             "transfers": [{"donor": t.donor, "donor_name": self.zones[t.donor].zone_name,
                            "facility_id": f"Location/{t.donor}-hub",
                            "distance_km": round(t.distance_km, 1), **t.quantities,
-                           "donor_after": t.donor_after} for t in allocation.transfers],
+                           "donor_after": t.donor_after,
+                           "reserve_days_before": round(
+                               reserve_days(hubs[t.donor].stock, hubs[t.donor].population), 1),
+                           "reserve_days_after": round(
+                               reserve_days(t.donor_after, hubs[t.donor].population), 1)}
+                          for t in allocation.transfers],
             "surge_target": allocation.surge_target, "deficit": allocation.deficit,
             "transferred": allocation.transferred, "uncovered": allocation.uncovered,
             "coverage_pct": ctx["allocation"]["coverage_pct"],

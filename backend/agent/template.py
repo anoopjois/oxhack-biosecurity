@@ -27,10 +27,12 @@ def build_template(ctx: dict) -> dict:
     deficit, cover = alloc["deficit"], alloc["coverage_pct"]
     any_deficit = any(deficit.values())
     any_uncovered = any(uncovered.values())
+    approval = ctx["approval"]["required"]  # True: the stock moves once approved (or after the timeout)
 
     # Headline
     if transfers:
-        stock_part = f"surge stock dispatched from {_hubs(len(transfers))}"
+        stock_part = (f"surge stock {'proposed' if approval else 'dispatched'} from "
+                      f"{_hubs(len(transfers))}")
     elif any_deficit:
         stock_part = "shortfall escalated to the national reserve"
     else:
@@ -52,13 +54,19 @@ def build_template(ctx: dict) -> dict:
     ]
     if transfers:
         sentences.append(
-            f"Stock was raised toward a {alloc['surge_multiplier']:g}× surge level from "
+            ("Stock is proposed toward a " if approval else "Stock was raised toward a ")
+            + f"{alloc['surge_multiplier']:g}× surge level from "
             + ("the nearest SAFE hub" if len(transfers) == 1
                else f"the {len(transfers)} nearest SAFE hubs")
             + ", covering "
             f"{cover['ppe_units']}% of the PPE, {cover['antiviral_doses']}% of the antiviral and "
-            f"{cover['vaccine_doses']}% of the vaccine shortfall. No donor fell below "
-            f"{alloc['safety_pct']}% of its normal per-capita stock.")
+            f"{cover['vaccine_doses']}% of the vaccine shortfall. No donor "
+            + ("would fall" if approval else "fell") + " below "
+            f"{alloc['safety_pct']}% of its normal per-capita stock, which is "
+            f"{alloc['reserve_floor_days']:g} days of normal use.")
+        if approval:
+            sentences.append(f"It moves once an operator approves, or automatically if nobody objects "
+                             f"within {ctx['approval']['timeout_s']} seconds.")
     elif any_deficit:
         sentences.append("No SAFE hub within reach had stock above its safety level, so the full "
                          "shortfall has been escalated.")
@@ -85,7 +93,8 @@ def build_template(ctx: dict) -> dict:
         senders = [t for t in transfers if t["antiviral_doses"] > 0]
         directives.append({
             "action": "Prioritise antivirals for frontline staff and over-65s",
-            "detail": f"{_n(moved['antiviral_doses'])} doses arriving from {_names(senders)}.",
+            "detail": f"{_n(moved['antiviral_doses'])} doses "
+                      + ("proposed from " if approval else "arriving from ") + f"{_names(senders)}.",
             "priority": "24h", "category": "supply",
         })
     if any_uncovered:

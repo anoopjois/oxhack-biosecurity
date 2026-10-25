@@ -103,8 +103,10 @@ def test_agent_events_in_tick(client):
     status_id = hit[0]["event_id"]
     after = client.get(f"{API}/events?since_id={status_id}&limit=1000").json()["events"]
     agent = [e for e in after if e["zip_code"] == OUTBREAK_ZONE]
-    assert [e["type"] for e in agent] == ["AGENT_ALLOCATION", "AGENT_DIRECTIVE", "RIDESHARE_WEBHOOK"]
-    allocation, directive, webhook = agent
+    assert [e["type"] for e in agent] == ["AGENT_ALLOCATION", "AGENT_DECISION", "AGENT_DIRECTIVE",
+                                          "RIDESHARE_WEBHOOK"]
+    allocation, decision, directive, webhook = agent
+    assert decision["payload"]["decision"] == "approved" and decision["payload"]["by"] == "policy"
     assert allocation["severity"] == "critical" and allocation["message"].startswith(
         "Autobalancer → Greater Manchester:")
     assert directive["payload"]["source"] == "template"

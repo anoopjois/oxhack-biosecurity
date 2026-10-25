@@ -17,7 +17,8 @@ export const PRIORITY_META: Record<Priority, { label: string; color: string; ink
 }
 
 export const ACCENT = '#2a78d6'
-export const SERIES = { current: '#111827', forecast: ACCENT }
+// CSS variables, so the chart follows the light/dark theme.
+export const SERIES = { current: 'var(--ink)', forecast: 'var(--accent)' }
 
 // Pins: a small dot inside a thin ring, same size for every zone so they never crowd.
 export const PIN_DOT_RADIUS = 3.6

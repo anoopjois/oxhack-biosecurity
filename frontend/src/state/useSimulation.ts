@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import type { Facility, MapStatus, SimEvent } from '../api/types'
-import { pollInterval } from '../lib/behaviour'
+import { approvalDeadlines, pollInterval, type Deadlines } from '../lib/behaviour'
 
 export const DEMO_ZONE = 'greater-manchester'
 export const DEMO_R = 0.4
@@ -14,17 +14,21 @@ export interface Simulation {
   connected: boolean
   /** Allocation events that arrived in the latest poll (drives the map arcs). */
   newAllocations: SimEvent[]
+  /** Pending stock moves: episode id -> when it auto-approves (local ms clock). */
+  deadlines: Deadlines
   play: (secondsPerDay?: number) => Promise<void>
   pause: () => Promise<void>
   step: () => Promise<void>
   reset: () => Promise<void>
   trigger: (zone: string, r: number) => Promise<void>
   runDemo: () => Promise<void>
+  approve: (episodeId: number) => Promise<void>
+  override: (episodeId: number) => Promise<void>
 }
 
 /**
  * All server state. Polls map-status and events (incrementally, by since_id) every 1 s while
- * playing and 3 s while paused, refetches right after every action, refetches inventory when
+ * playing or awaiting an approval and 3 s otherwise, refetches right after every action, refetches inventory when
  * a new allocation arrives, and clears every cache when clock.run changes (a reset).
  * Polls never overlap and pause while the tab is hidden.
  */
@@ -34,6 +38,7 @@ export function useSimulation(): Simulation {
   const [inventory, setInventory] = useState<Facility[]>([])
   const [connected, setConnected] = useState(true)
   const [newAllocations, setNewAllocations] = useState<SimEvent[]>([])
+  const [deadlines, setDeadlines] = useState<Deadlines>(new Map())
 
   const lastEventId = useRef(0)
   const run = useRef<number | null>(null)
@@ -59,17 +64,17 @@ export function useSimulation(): Simulation {
         setNewAllocations([])
         await refreshInventory()
       }
-      playing.current = next.clock.playing
+      playing.current = next.clock.playing || next.clock.awaiting_approval
       setStatus(next)
+      setDeadlines((old) => approvalDeadlines(old, next.approvals ?? [], Date.now()))
       const fresh = await api.events(lastEventId.current)
       if (fresh.events.length > 0) {
         lastEventId.current = fresh.last_id
         setEvents((old) => [...old, ...fresh.events])
         const allocations = fresh.events.filter((e) => e.type === 'AGENT_ALLOCATION')
-        if (allocations.length > 0) {
-          if (!baseline.current) setNewAllocations(allocations)
-          await refreshInventory()
-        }
+        if (allocations.length > 0 && !baseline.current) setNewAllocations(allocations)
+        // Stock moves when a proposal is approved (AGENT_DECISION), not when it is proposed.
+        if (fresh.events.some((e) => e.type === 'AGENT_DECISION')) await refreshInventory()
       }
       baseline.current = false
       setConnected(true)
@@ -113,5 +118,9 @@ export function useSimulation(): Simulation {
     await api.play(DEMO_SECONDS_PER_DAY)
   }), [act])
 
-  return { status, events, inventory, connected, newAllocations, play, pause, step, reset, trigger, runDemo }
+  const approve = useCallback((id: number) => act(() => api.approve(id)), [act])
+  const override = useCallback((id: number) => act(() => api.override(id)), [act])
+
+  return { status, events, inventory, connected, newAllocations, deadlines, play, pause, step, reset, trigger,
+           runDemo, approve, override }
 }

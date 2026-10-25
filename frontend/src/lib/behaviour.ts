@@ -8,6 +8,24 @@ export const SPEEDS = [0.5, 1, 2]
 
 export const pollInterval = (playing: boolean) => (playing ? POLL_PLAYING_MS : POLL_PAUSED_MS)
 
+/** Pending approvals: episode id -> local time (ms) when it auto-approves. */
+export type Deadlines = Map<number, { at: number; timeoutS: number }>
+
+/** Deadlines to count down to. Polls report seconds_left, which drifts by the request time;
+ *  keep the previous deadline unless it moved by more than DEADLINE_JITTER_MS, so the
+ *  countdown ticks smoothly instead of jumping on every poll. */
+export const DEADLINE_JITTER_MS = 1500
+export function approvalDeadlines(old: Deadlines, approvals: { episode_id: number; seconds_left: number; timeout_s: number }[],
+                                  now: number): Deadlines {
+  const next: Deadlines = new Map()
+  for (const a of approvals) {
+    const at = now + a.seconds_left * 1000
+    const previous = old.get(a.episode_id)
+    next.set(a.episode_id, previous && Math.abs(previous.at - at) < DEADLINE_JITTER_MS ? previous : { at, timeoutS: a.timeout_s })
+  }
+  return next
+}
+
 export const TILE_ERRORS_BEFORE_FALLBACK = 3
 export const TILE_TIMEOUT_MS = 4000
 

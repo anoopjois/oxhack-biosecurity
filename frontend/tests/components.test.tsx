@@ -9,7 +9,7 @@ import { SpikeDialog } from '../src/components/SpikeDialog'
 import { Timeline } from '../src/components/Timeline'
 import { ZonePanel } from '../src/components/ZonePanel'
 import { RISK_SCORE_HELP } from '../src/lib/status'
-import { allocation, briefing, clock, event, zone } from './fixtures'
+import { allocation, briefing, clock, decision, event, zone } from './fixtures'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -18,7 +18,7 @@ const headerProps = {
   busy: false, confirmReset: false, helpOpen: false, speed: 1, baseMode: 'vector' as const, showLog: false,
   spikeSlot: null, onSpeed: noop, onPlay: noop, onPause: noop, onStep: noop, onAskReset: noop,
   onConfirmReset: noop, onCancelReset: noop, onSpike: noop, onRunDemo: noop, onToggleHelp: noop,
-  onBaseMode: noop, onShowLog: noop,
+  onBaseMode: noop, onShowLog: noop, theme: 'auto' as const, onTheme: noop, onCycleTheme: noop,
 }
 
 describe('Header', () => {
@@ -66,6 +66,24 @@ describe('Header', () => {
     expect(screen.getByTestId('show-log')).not.toBeChecked()
   })
 
+  it('holds Step and says why while a stock move awaits approval', () => {
+    render(<Header {...headerProps} clock={clock({ awaiting_approval: true })} />)
+    expect(screen.getByTestId('step')).toBeDisabled()
+    expect(screen.getByTestId('step')).toHaveAttribute('title', 'Waiting for a decision on the proposed stock move')
+    expect(screen.getByTestId('clock-held')).toHaveTextContent('waiting for approval')
+  })
+
+  it('switches theme from the header button and from help & settings', () => {
+    const onCycleTheme = vi.fn(), onTheme = vi.fn()
+    render(<Header {...headerProps} clock={clock()} theme="dark" helpOpen onCycleTheme={onCycleTheme} onTheme={onTheme} />)
+    expect(screen.getByTestId('theme')).toHaveAttribute('title', 'Theme: Dark (click to change)')
+    fireEvent.click(screen.getByTestId('theme'))
+    expect(onCycleTheme).toHaveBeenCalledOnce()
+    expect(screen.getByTestId('theme-dark')).toBeChecked()
+    fireEvent.click(screen.getByTestId('theme-light'))
+    expect(onTheme).toHaveBeenCalledWith('light')
+  })
+
   it('asks before resetting', () => {
     const onConfirmReset = vi.fn()
     render(<Header {...headerProps} clock={clock()} confirmReset onConfirmReset={onConfirmReset} />)
@@ -107,6 +125,7 @@ describe('Incidents', () => {
   const alloc = event('AGENT_ALLOCATION', allocation as unknown as Record<string, unknown>)
   const brief = event('AGENT_DIRECTIVE', briefing('template', 'GM: doubling every 2.1 days') as unknown as Record<string, unknown>)
   const ride = event('RIDESHARE_WEBHOOK', { episode_id: 1, direction: 'disable', request: { review_at: '2026-10-09', area: { radius_km: 25 } } })
+  const approved = event('AGENT_DECISION', decision() as unknown as Record<string, unknown>)
 
   it('shows an empty state before any outbreak', () => {
     render(<Incidents events={[]} zones={zones} onShowArcs={noop} onSelect={noop} />)
@@ -126,12 +145,15 @@ describe('Incidents', () => {
 
   it('fills in every step with plain summaries and details behind expands', () => {
     const onShowArcs = vi.fn()
-    render(<Incidents events={[injected, detected, alloc, brief, ride]} zones={zones} onShowArcs={onShowArcs} onSelect={noop} />)
+    render(<Incidents events={[injected, detected, alloc, approved, brief, ride]} zones={zones} onShowArcs={onShowArcs} onSelect={noop} />)
     const card = screen.getByTestId('incident')
     expect(card).toHaveAttribute('data-phase', 'critical')
     for (const step of ['detected', 'stock', 'briefing', 'containment']) {
       expect(card.querySelector(`[data-step="${step}"]`)).toHaveClass('step-done')
     }
+    expect(card.querySelector('[data-step="stock"]')).toHaveTextContent('Stock moved')
+    expect(screen.getByTestId('decision-tag')).toHaveTextContent('Approved by operator')
+    expect(screen.queryByTestId('approval')).not.toBeInTheDocument()
     expect(screen.getByTestId('stock-summary')).toHaveTextContent('PPE 75k → 116k')
     expect(card).toHaveTextContent('Pooled rideshare paused within 25 km until 9 Oct')
     expect(screen.queryByTestId('stock-table')).not.toBeInTheDocument()
@@ -143,6 +165,57 @@ describe('Incidents', () => {
     fireEvent.click(screen.getByTestId('briefing-toggle'))
     const directives = screen.getAllByTestId('directive')
     expect(directives.map((d) => within(d).getByText(/IMMEDIATE|24H|72H/).textContent)).toEqual(['IMMEDIATE', '24H', '72H'])
+  })
+
+  it('asks a person to approve or override a proposed move, with a countdown', () => {
+    const onApprove = vi.fn(), onOverride = vi.fn()
+    const deadlines = new Map([[1, { at: Date.now() + 23_000, timeoutS: 30 }]])
+    render(<Incidents events={[detected, alloc, brief]} zones={zones} onShowArcs={noop} onSelect={noop}
+                      deadlines={deadlines} onApprove={onApprove} onOverride={onOverride} />)
+    const stock = screen.getByTestId('incident').querySelector('[data-step="stock"]')!
+    expect(stock).toHaveAttribute('data-variant', 'await')
+    expect(stock).toHaveTextContent('Stock move proposed')
+    expect(screen.getByTestId('approval-countdown')).toHaveTextContent('Auto-approves in 23 s unless someone objects')
+    fireEvent.click(screen.getByTestId('approve'))
+    fireEvent.click(screen.getByTestId('override'))
+    expect(onApprove).toHaveBeenCalledWith(1)
+    expect(onOverride).toHaveBeenCalledWith(1)
+  })
+
+  it('shows that donors keep a safe reserve after giving', () => {
+    const { rerender } = render(<Incidents events={[detected, alloc]} zones={zones} onShowArcs={noop} onSelect={noop} />)
+    expect(screen.getByTestId('donor-safety')).toHaveTextContent(
+      'Donors stay safe: Cheshire would keep 5.8 days of reserve after giving · West Yorkshire 6.1 days · none below 4.2 days')
+    rerender(<Incidents events={[detected, alloc, approved]} zones={zones} onShowArcs={noop} onSelect={noop} />)
+    expect(screen.getByTestId('donor-safety')).toHaveTextContent('Cheshire keeps 5.8 days of reserve after giving')
+    fireEvent.click(screen.getByTestId('stock-toggle'))
+    expect(screen.getByTestId('stock-table')).toHaveTextContent('Reserve after')
+    expect(screen.getByTestId('stock-table')).toHaveTextContent('6.1 days')
+  })
+
+  it('says plainly when every donor gives down to its safety floor', () => {
+    const atFloor = { ...allocation, transfers: allocation.transfers.map((t) => ({ ...t, reserve_days_after: 4.2 })) }
+    render(<Incidents events={[detected, event('AGENT_ALLOCATION', atFloor as unknown as Record<string, unknown>)]}
+                      zones={zones} onShowArcs={noop} onSelect={noop} />)
+    expect(screen.getByTestId('donor-safety')).toHaveTextContent(
+      'Donors stay safe: Cheshire and West Yorkshire would each keep 4.2 days of reserve after giving, their safety floor')
+  })
+
+  it('says when nobody objected and the move went ahead by itself', () => {
+    const timedOut = event('AGENT_DECISION', decision({ by: 'timeout' }) as unknown as Record<string, unknown>)
+    render(<Incidents events={[detected, alloc, timedOut]} zones={zones} onShowArcs={noop} onSelect={noop} />)
+    expect(screen.getByTestId('decision-tag')).toHaveTextContent('Auto-approved: nobody objected within 30 s')
+  })
+
+  it('shows an overridden move as stopped, with nothing moved', () => {
+    const overridden = event('AGENT_DECISION', decision({ decision: 'overridden', transfers: [] }) as unknown as Record<string, unknown>)
+    render(<Incidents events={[detected, alloc, overridden]} zones={zones} onShowArcs={noop} onSelect={noop} />)
+    const stock = screen.getByTestId('incident').querySelector('[data-step="stock"]')!
+    expect(stock).toHaveAttribute('data-variant', 'overridden')
+    expect(stock).toHaveTextContent('Stock move overridden')
+    expect(screen.getByTestId('overridden')).toHaveTextContent('no stock moved')
+    expect(screen.queryByTestId('approval')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stock-summary')).not.toBeInTheDocument()
   })
 
   it('replaces the rule-based briefing with the AI briefing in place', () => {

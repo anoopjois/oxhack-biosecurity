@@ -13,6 +13,7 @@ class Clock(BaseModel):
     at_end: bool
     seed: int
     run: int
+    awaiting_approval: bool
 
 
 class Telemetry(BaseModel):
@@ -41,9 +42,17 @@ class ZoneStatus(BaseModel):
     telemetry: Telemetry
 
 
+class PendingApproval(BaseModel):
+    episode_id: int
+    zip_code: str
+    seconds_left: float  # until it auto-approves (relative, so client clock skew doesn't matter)
+    timeout_s: float
+
+
 class MapStatus(BaseModel):
     clock: Clock
     zones: list[ZoneStatus]
+    approvals: list[PendingApproval]
 
 
 class HistoryDay(BaseModel):
@@ -136,3 +145,8 @@ class StepResponse(BaseModel):
     clock: Clock
     tick_ms: float
     transitions: list[TransitionOut]
+
+
+class DecisionResponse(BaseModel):
+    event: Event
+    clock: Clock

@@ -1,6 +1,6 @@
 // Layer A: pure logic.
 import { describe, expect, it } from 'vitest'
-import { leadMarkers, pollInterval, shortcutFor, shouldUseOffline } from '../src/lib/behaviour'
+import { approvalDeadlines, DEADLINE_JITTER_MS, leadMarkers, pollInterval, shortcutFor, shouldUseOffline } from '../src/lib/behaviour'
 import { buildFeed, isDefaultVisible, latestAllocation } from '../src/lib/events'
 import { compact, doublingDays, longDate, shortDate, shortName } from '../src/lib/format'
 import { arcPoints, arrowRotation } from '../src/lib/geo'
@@ -164,5 +164,20 @@ describe('arc labels', () => {
     expect(labelOffset([53.5, -2.9], target)).toBe('translate(calc(-100% - 18px), -50%)') // west
     expect(labelOffset([54.0, -2.25], target)).toBe('translate(-50%, calc(-100% - 18px))') // north: above
     expect(labelOffset([53.0, -2.25], target)).toBe('translate(-50%, 18px)')              // south: below
+  })
+})
+
+describe('approval countdown', () => {
+  it('turns seconds_left into a local deadline and keeps it steady across polls', () => {
+    const first = approvalDeadlines(new Map(), [{ episode_id: 1, seconds_left: 30, timeout_s: 30 }], 1_000)
+    expect(first.get(1)).toEqual({ at: 31_000, timeoutS: 30 })
+    // A later poll reports slightly less time than expected (request latency): keep the old deadline.
+    const second = approvalDeadlines(first, [{ episode_id: 1, seconds_left: 27.5, timeout_s: 30 }], 3_000)
+    expect(second.get(1)).toBe(first.get(1))
+    // A real jump (more than the jitter allowance) is taken over.
+    const jumped = approvalDeadlines(first, [{ episode_id: 1, seconds_left: 10, timeout_s: 30 }], 3_000 + DEADLINE_JITTER_MS)
+    expect(jumped.get(1)!.at).toBe(3_000 + DEADLINE_JITTER_MS + 10_000)
+    // Decided episodes drop out.
+    expect(approvalDeadlines(first, [], 4_000).size).toBe(0)
   })
 })
