@@ -122,26 +122,27 @@ Bottom Panel (Inventory Metrics): Comparative bar charts showing real-time inven
 
 
 NHS England Regions
-NHS England is divided into seven regional teams, which oversee 42 Integrated Care Systems (ICSs) and Integrated Care Boards (ICBs): [1, 2]
-North East and Yorkshire (4 ICSs)
-Sub-areas: Cumbria and the North East, West Yorkshire and Harrogate, Humber Coast and Vale, South Yorkshire and Bassetlaw. [1, 2]
-North West (3 ICSs)
-Sub-areas: Cheshire and Merseyside, Greater Manchester, Lancashire and South Cumbria. [1, 2]
-Midlands (11 ICSs)
-Sub-areas: Birmingham and Solihull, Black Country, Derbyshire, Herefordshire and Worcestershire, Leicestershire and Rutland, Lincolnshire, Northamptonshire, Nottinghamshire, Shropshire and Telford and Wrekin, Staffordshire and Stoke-on-Trent, Coventry and Warwickshire. [1, 2]
-East of England (6 ICSs)
-Sub-areas: Bedfordshire, Luton and Milton Keynes, Cambridgeshire and Peterborough, Hertfordshire and West Essex, Mid and South Essex, Norfolk and Waveney, Suffolk and North East Essex. [1, 2]
-London (5 ICSs)
-Sub-areas: North West London, Central London, East London, South East London, South West London. [1, 2]
-South East (6 ICSs)
-Sub-areas: Buckinghamshire, Oxfordshire and Berkshire West, Frimley Health and Care, Hampshire and Isle of Wight, Kent and Medway, Surrey Heartlands, Sussex and East Surrey. [1, 2]
-South West (7 ICSs)
-Sub-areas: Bath and North East Somerset, Swindon and Wiltshire, Bristol, North Somerset and South Gloucestershire, Cornwall and the Isles of Scilly, Devon, Dorset, Gloucestershire, Somerset. [1, 2]
+England has 36 Integrated Care Boards from 1 April 2026, across seven NHS regions.
+Source: [ONS April 2026 names and codes](https://geoportal.statistics.gov.uk/datasets/integrated-care-boards-april-2026-names-and-codes-in-en/explore).
+The current demo roster and approximate metadata are in [engine/zones.csv](../engine/zones.csv).
+North East and Yorkshire (4 ICBs)
+Sub-areas: North East and North Cumbria; Humber and North Yorkshire; South Yorkshire; West Yorkshire.
+North West (3 ICBs)
+Sub-areas: Cheshire and Merseyside; Greater Manchester; Lancashire and South Cumbria.
+Midlands (11 ICBs)
+Sub-areas: Birmingham and Solihull; Black Country; Coventry and Warwickshire; Derby and Derbyshire; Herefordshire and Worcestershire; Leicester, Leicestershire and Rutland; Lincolnshire; Northamptonshire; Nottingham and Nottinghamshire; Shropshire, Telford and Wrekin; Staffordshire and Stoke-on-Trent.
+East of England (3 ICBs)
+Sub-areas: Central East; Essex; Norfolk and Suffolk.
+London (4 ICBs)
+Sub-areas: West and North London; North East London; South East London; South West London.
+South East (4 ICBs)
+Sub-areas: Thames Valley; Hampshire and Isle of Wight; Kent and Medway; Surrey and Sussex.
+South West (7 ICBs)
+Sub-areas: Bath and North East Somerset, Swindon and Wiltshire; Bristol, North Somerset and South Gloucestershire; Cornwall and the Isles of Scilly; Devon; Dorset; Gloucestershire; Somerset.
 
 NHS Scotland
 Managed through 14 regional NHS Health Boards (such as NHS Greater Glasgow and Clyde, NHS Lothian, NHS Grampian) alongside 31 Health and Social Care Integration Partnerships. [1]
 
 NHS Wales
 Managed through 7 Local Health Boards (such as Cardiff and Vale, Swansea Bay, Betsi Cadwaladr) alongside NHS Wales Collaborative agencies. [1, 2]
-
 

@@ -17,23 +17,17 @@ northamptonshire,Northamptonshire,Midlands,52.30,-0.85,790000
 nottingham-and-nottinghamshire,Nottingham and Nottinghamshire,Midlands,53.10,-1.05,1200000
 shropshire-telford-and-wrekin,"Shropshire, Telford and Wrekin",Midlands,52.70,-2.65,510000
 staffordshire-and-stoke-on-trent,Staffordshire and Stoke-on-Trent,Midlands,52.85,-2.05,1150000
-bedfordshire-luton-and-milton-keynes,"Bedfordshire, Luton and Milton Keynes",East of England,52.00,-0.55,1000000
-cambridgeshire-and-peterborough,Cambridgeshire and Peterborough,East of England,52.35,0.05,950000
-hertfordshire-and-west-essex,Hertfordshire and West Essex,East of England,51.80,-0.20,1600000
-mid-and-south-essex,Mid and South Essex,East of England,51.65,0.55,1250000
-norfolk-and-waveney,Norfolk and Waveney,East of England,52.65,1.15,1100000
-suffolk-and-north-east-essex,Suffolk and North East Essex,East of England,52.10,1.00,1050000
-north-west-london,North West London,London,51.53,-0.33,2100000
-north-central-london,North Central London,London,51.57,-0.13,1500000
+central-east,Central East,East of England,52.10,-0.10,3200000
+essex,Essex,East of England,51.80,0.60,1950000
+norfolk-and-suffolk,Norfolk and Suffolk,East of England,52.35,1.10,1800000
+west-and-north-london,West and North London,London,51.55,-0.25,3600000
 north-east-london,North East London,London,51.55,0.05,2100000
 south-east-london,South East London,London,51.44,0.02,1900000
 south-west-london,South West London,London,51.42,-0.20,1500000
-buckinghamshire-oxfordshire-and-berkshire-west,"Buckinghamshire, Oxfordshire and Berkshire West",South East,51.75,-1.05,1900000
-frimley,Frimley,South East,51.30,-0.75,800000
-hampshire-and-isle-of-wight,Hampshire and Isle of Wight,South East,50.95,-1.25,1900000
+thames-valley,Thames Valley,South East,51.65,-0.95,2350000
+hampshire-and-isle-of-wight,Hampshire and Isle of Wight,South East,50.98,-1.17,2050000
 kent-and-medway,Kent and Medway,South East,51.20,0.75,1900000
-surrey-heartlands,Surrey Heartlands,South East,51.25,-0.40,1100000
-sussex,Sussex,South East,50.93,-0.15,1750000
+surrey-and-sussex,Surrey and Sussex,South East,50.99,-0.25,3050000
 bath-and-north-east-somerset-swindon-and-wiltshire,"Bath and North East Somerset, Swindon and Wiltshire",South West,51.35,-1.95,950000
 bristol-north-somerset-and-south-gloucestershire,"Bristol, North Somerset and South Gloucestershire",South West,51.45,-2.60,1000000
 cornwall-and-the-isles-of-scilly,Cornwall and the Isles of Scilly,South West,50.40,-4.90,580000

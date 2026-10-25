@@ -17,7 +17,8 @@ Every constant named here lives in `engine/config.py` (the maths) or `backend/co
 
 ## 1. The signals
 
-The system watches three numbers for each of England's 42 Integrated Care Boards (ICBs).
+The system watches three numbers for each of England's 36 Integrated Care Boards (ICBs),
+using the April 2026 roster in `engine/zones.csv`.
 We call them "zones".
 
 | Signal | Symbol | What it is | Why it helps |
@@ -362,30 +363,38 @@ Quantities are identical either way.
 ## 8. Measured results
 
 Unless stated otherwise, each number comes from 200 random seeds of a scenario that
-matches the demo: 42 zones, 28 days of history plus 14 future days, and an outbreak
+matches the demo: 36 zones, 28 days of history plus 14 future days, and an outbreak
 with r = 0.4 starting on day 28 in a randomly chosen zone. Run
 `.venv/bin/python -m pytest -s engine/tests/test_required.py` to print them.
 
+**Known failing requirement:** the 36-ICB revalidation produced one false CRITICAL
+zone-day. The zero-false-CRITICAL test remains failing, not skipped or weakened.
+The user approved retaining the roster update with unchanged maths and documenting
+this limitation. Changing the roster changes the generator's random draws; the
+previous 42-ICB result of zero false CRITICALs in 193,200 zone-days is historical,
+not a claim about the current roster.
+
 | Claim | Number | Produced by |
 |---|---|---|
-| False red alerts on clean data | **0** CRITICAL in **193,200** clean zone-days | `test_required.py::test_no_critical_on_clean_zones` |
-| False amber on clean data | 6,078 of 193,200 zone-days (**3.1%**), about 1 of the 42 zones on a typical day | same test |
+| False red on clean data | **1 CRITICAL zone-day** in **165,600** clean zone-days; **FAILS** the required zero | `test_required.py::test_no_critical_on_clean_zones` |
+| False amber on clean data | 5,165 of 165,600 zone-days (**3.1%**) | same test |
 | Red alert before the current score hits 80 | **100%** of seeds, on or before the crossing (test requires ≥ 95%) | `test_critical_leads_current_score_crossing` |
-| Lead time (crossing day − alert day) | median **2 days**, mean **2.25** | same test |
-| Spread of the lead | 0 days: 2 · 1: 33 · 2: 94 · 3: 58 · 4: 10 · 5: 3 seeds | same test |
+| Lead time (crossing day − alert day) | median **2 days**, mean **2.245** | same test |
+| Spread of the lead | 0 days: 5 · 1: 30 · 2: 90 · 3: 61 · 4: 14 seeds | same test |
 | First amber or red, days after onset | median **2** | same test |
 | First red (CRITICAL), days after onset | median **4** | same test |
 | Current score ≥ 80, days after onset | median **6** | same test |
 | Alert holds | never fades before onset + 12 days | `test_alert_holds_until_onset_plus_12` |
 | No look-ahead | Corrupting every row after the as-of date, and adding a second outbreak there, changes nothing | `test_no_look_ahead` |
-| The demo run (seed 42, Greater Manchester, r = 0.4) | Alert on **2 Oct** (forecast 82.7, current 62.1, doubling 2.1 days); current score passes 80 on **4 Oct**: a **2-day** lead | Replayed step by step through the API; `frontend/e2e/demo.spec.ts` checks that the lead caption appears |
+| The demo run (seed 42, Greater Manchester, r = 0.4, onset day 27) | Alert on **2 Oct** (forecast 81.8, current 54.8, doubling 2.7 days); current score passes 80 on **5 Oct**: a **3-day** lead | Generator and engine replay; `frontend/e2e/demo.spec.ts` covers the real-app flow |
 | Reproducibility | State is a pure function of the seed plus the ordered action log | `backend/tests/test_invariants.py::test_reproducible_from_seed_and_actions`, `test_agent.py::test_reproducibility_with_agent` |
 | The past never changes | Injecting a spike only alters days from today onwards | `test_invariants.py::test_trigger_changes_only_future` |
 
 ### Lead time against growth rate
 
-Measured with `scripts/lead_vs_r.py`, which uses the same 200 seeds and the same
-demo-length timeline as the test above (the r = 0.4 row reproduces it exactly).
+**Historical 42-ICB results, not rerun for the 36-ICB roster.** Measured with
+`scripts/lead_vs_r.py`, using 200 seeds and the demo-length timeline. The r = 0.4
+row reproduced the former 42-ICB validation, not the revised results above.
 "k" is days since onset.
 
 | r (per day) | Doubling | Median lead | Mean lead | Range | Alert on or before 80 | Median k: amber / red / 80 | Runs with no red alert |
@@ -412,8 +421,9 @@ at r = 0.1, 104 of 200 runs still never go red.
    - lab batch effects and reporting delays;
    - A&E waits driven by many things besides one pathogen.
 
-   The 0-false-alarm and 2-day-lead figures are properties of the method **on data that
-   matches its assumptions**.
+   False-alarm and lead-time measurements describe the method **on data that matches
+   its assumptions**, not a guarantee of clinical performance. The current 36-ICB
+   roster fails the zero-false-CRITICAL requirement even on this synthetic data.
 2. **`BETA_ER = 20` is matched to the generator**, which uses exactly 20. In reality the
    wastewater-to-A&E coupling would differ by pathogen and by zone, and it would have
    to be estimated (for example, by regressing ER on lagged log wastewater during past

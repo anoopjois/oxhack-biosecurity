@@ -16,6 +16,10 @@ See the [setup instructions](../README.md) and [talk track](DEMO_SCRIPT.md).
 - A real end-to-end send is a separate operator action: only click **Approve & send
   report** if you intend to email the configured recipient.
 - Configure before starting: restarting the backend resets demo records.
+- Verify the map has 36 ICBs using the April 2026 roster. Restart the backend to
+  reload changed zone metadata; resetting the clock alone does not reload the CSV.
+- Disclose the known failing clean-data requirement: 1 false CRITICAL zone-day in
+  165,600 zone-days across 200 seeds. Do not claim zero false alerts.
 
 ## Run the demo
 
@@ -32,7 +36,8 @@ See the [setup instructions](../README.md) and [talk track](DEMO_SCRIPT.md).
 8. Download the PDF. Check the exercise label, zone, detection date, measurements,
    executive summary, assessment, advisory actions and limitations.
 9. Check the actual recipient inbox/spam folder; SMTP acceptance alone is not delivery.
-10. Step to day 33 to show the lead band: the alert came before current risk reached 80.
+10. Step to day 34 (5 October) to show the lead band: in seed 42, the alert came
+    three days before current risk reached 80.
 11. Play to the end, then reset. Explain that reset clears reports and cannot recall an
     email already submitted.
 

@@ -28,6 +28,23 @@ async function expectFitsViewport(page: Page) {
   })).toBe(false)
 }
 
+test('map displays the 36 current ICBs and selects a merged area', async ({ page, request }) => {
+  await freshBackend(request)
+  await page.goto('/')
+  await page.getByTestId('coach-dismiss').click()
+  await expect(page.locator('path.pin-ring')).toHaveCount(36)
+  for (const zone of ['central-east', 'essex', 'norfolk-and-suffolk',
+    'west-and-north-london', 'thames-valley', 'surrey-and-sussex']) {
+    await expect(page.locator(`path.pin-ring[data-zone="${zone}"]`)).toHaveCount(1)
+  }
+  for (const retired of ['north-central-london', 'north-west-london', 'frimley', 'sussex']) {
+    await expect(page.locator(`path.pin-ring[data-zone="${retired}"]`)).toHaveCount(0)
+  }
+  await page.locator('path.pin-ring[data-zone="central-east"]').click()
+  await expect(page.getByTestId('zone-panel')).toContainText('Central East')
+  await expect(page.getByTestId('score-chart')).toBeVisible()
+})
+
 test('detection shows summary and explicit email approval, without hidden spike, stock or rideshare', async ({ page, request }, info) => {
   const initial = await freshBackend(request)
   await page.goto('/')
