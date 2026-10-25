@@ -44,4 +44,5 @@ export const api = {
   reset: () => post<{ clock: Clock }>('/clock/reset'),
   approve: (episodeId: number) => post<{ clock: Clock }>(`/episodes/${episodeId}/approve`),
   override: (episodeId: number) => post<{ clock: Clock }>(`/episodes/${episodeId}/override`),
+  retryReport: (episodeId: number) => post<{ clock: Clock }>(`/episodes/${episodeId}/retry`),
 }

@@ -1,121 +1,155 @@
-# BioSecure
+# BioSecure: early warning and approved incident reporting
 
-An early-warning system for disease outbreaks across England's 42 Integrated Care
-Boards (ICBs), built as a hackathon demo. It has two halves:
+This hackathon demo monitors synthetic wastewater and A&E telemetry across England's
+ICBs, forecasts risk 48 hours ahead, and opens an incident when the forecast is critical
+and growth is statistically significant.
 
-- **Early warning.** It watches wastewater viral load and A&E waiting times, scores
-  each area against its own recent baseline, and forecasts the risk score 48 hours
-  ahead. When the forecast crosses 80 and the growth is statistically significant, the
-  area goes **red**, typically 2 days before today's score would get there.
-- **Autobalancer.** It runs as soon as an area goes red. It moves PPE, antivirals and
-  vaccines from the nearest areas that are still normal, with no donor going below a
-  safety floor. It then writes a briefing and triggers a containment step (a mock
-  rideshare webhook).
+**All data is synthetic. Reports and emails are prominently labelled as exercises.**
 
-All quantities are computed deterministically. Claude, when an API key is present, only
-writes the plain-English rationale and actions.
+The incident card shows a short evidence-based summary. An operator can **Approve &
+send report** or **Dismiss**. Approval calls Gemini to write an assessment, renders a
+professional PDF, and emails it using SMTP. There is no auto-approval, stock transfer,
+rideshare action or separate briefing. Pending approvals and report delivery do not
+stop the simulation clock. Synthetic injection remains a demo control and chart marker,
+but no longer appears as a hidden step in incident cards.
 
-> **All data is synthetic.** See the [limitations](docs/MATHS.md#9-limitations-honest).
+## Run on Windows
 
-![Greater Manchester goes red on 2 Oct: the 48-hour forecast is 83 while today's risk is 62, and stock arcs in from three nearby areas](docs/figures/ui-critical-arcs.png)
+Recommended prerequisites: Python 3.13 and Node 24 with npm.
 
-## Quickstart
+From the repository root in PowerShell:
 
-You need **Python 3.13** (other 3.10+ versions are untested) and **Node 24** with npm.
-
-```bash
-git clone https://github.com/anoopjois/oxhack-biosecurity.git
-cd oxhack-biosecurity
-cp .env.example .env        # optional: add ANTHROPIC_API_KEY for AI briefings
-./dev.sh                    # first run creates .venv and installs npm packages
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+Copy-Item .env.example .env  # first setup only; do not overwrite existing credentials
+Set-Location frontend
+npm install
 ```
 
-Open http://localhost:5173 and click **★ Run demo**.
+Start the backend from the repository root in one terminal:
 
-`dev.sh` starts FastAPI on `BACKEND_PORT` (8000) and Vite on `FRONTEND_PORT` (5173).
-Both come from `.env`, and Ctrl-C stops both. If your default `python3` is older than
-3.10, run `PYTHON=python3.13 ./dev.sh`.
-
-Without an API key, every briefing is the rule-based one. Everything else is identical.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    subgraph engine["engine/ (pure functions, no I/O)"]
-        gen["generator.py<br/>synthetic telemetry + ground truth"]
-        pre["preprocess.py<br/>daily resample, logs, 3-day mean"]
-        score["scoring.py<br/>baseline, z-scores, combine()"]
-        fc["forecast.py<br/>OLS growth, 48h projection"]
-        st["status.py<br/>stateless replay → status"]
-        pre --> score --> st
-        pre --> fc --> st
-    end
-
-    subgraph backend["backend/ (FastAPI + SQLite)"]
-        sim["simulation.py<br/>clock, full timeline in memory"]
-        db[("SQLite<br/>telemetry ingested day by day,<br/>events, inventory, episodes")]
-        agent["agent/<br/>allocation → executor<br/>template briefing, rideshare mock"]
-        llm["agent/llm.py<br/>Claude briefing<br/>(background thread)"]
-        api["main.py<br/>/api/v1/*"]
-    end
-
-    subgraph frontend["frontend/ (React + Vite)"]
-        ui["map, zone card, incident cards,<br/>timeline, controls"]
-    end
-
-    gen -->|"pre-generated history + future"| sim
-    sim -->|"each tick ingests one day"| db
-    db -->|"telemetry up to today"| st
-    st -->|"status changes"| sim
-    sim -->|"transition to CRITICAL"| agent
-    agent -->|"transfers, events"| db
-    agent -.->|"after commit, async"| llm
-    llm -.->|"validated briefing or fallback"| db
-    db --> api
-    api <-->|"poll map-status and events; play, step, trigger"| ui
+```powershell
+.\.venv\Scripts\python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-- **The engine never sees the future.** The simulation holds the whole timeline in
-  memory, but the database only receives a day when the clock reaches it, and the
-  engine scores only from the database.
-- **The state is reproducible.** It is a pure function of the seed and the ordered list
-  of actions.
-- **The LLM is off the critical path.** It never blocks the clock and never sets
-  quantities.
+Start the frontend in a second terminal:
 
-## Tests
+```powershell
+Set-Location frontend
+npm run dev -- --strictPort
+```
 
-```bash
-# Python: engine maths, the four required tests, backend, agent (about 1 minute)
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest
-.venv/bin/python -m pytest -s engine/tests/test_required.py   # also prints the pitch numbers
+Open http://localhost:5173 and click **Run demo**. The health check is
+http://localhost:8000/api/v1/health; API documentation is at http://localhost:8000/docs.
 
-# Frontend unit and component tests (vitest), lint and type-checked build
-cd frontend
+On Linux/macOS or in WSL, `./dev.sh` creates the virtual environment, installs
+dependencies and starts both servers. Its `.venv/bin` paths are not compatible with
+a native Windows virtual environment.
+
+## Configure Gemini and email
+
+Edit your local `.env` before starting the backend. Never commit or paste credentials.
+
+```dotenv
+GEMINI_API_KEY=your-google-ai-studio-api-key
+GEMINI_MODEL=gemini-2.5-flash
+ALERT_RECIPIENT=daeyad1@gmail.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURITY=starttls
+SMTP_USERNAME=your-sending-account@gmail.com
+SMTP_PASSWORD=your-gmail-app-password
+SMTP_FROM=your-sending-account@gmail.com
+```
+
+For Gmail, enable 2-Step Verification and create an **app password**; do not use your
+ordinary Google account password. Other SMTP providers work with their host,
+credentials and sender address. Use `SMTP_SECURITY=ssl` and the provider's TLS port
+(usually 465) for implicit TLS; plaintext SMTP is not supported.
+
+The recipient defaults to **daeyad1@gmail.com**, a test inbox, not an official authority.
+`ALERT_RECIPIENT` is one configured address for all zones; jurisdiction-based authority
+routing is not implemented. Change it only when an authorised recipient is agreed.
+Use a model available to your Gemini API key; `GEMINI_MODEL` is configurable.
+
+Missing credentials do not prevent the dashboard running. Approved report jobs then
+fail visibly with a configuration message; they never pretend an email was sent.
+Settings load at process startup, so configure them before the demo.
+
+### What approval does
+
+1. Stores an explicit operator decision; repeat approval returns HTTP 409.
+2. Queues report generation on a background thread.
+3. Sends only the detection-time observed snapshot to Gemini, never future telemetry,
+   injected outbreak ground truth or secrets.
+4. Validates structured JSON and builds a paginated PDF with an executive summary,
+   verified evidence table, AI assessment, recommendations and limitations.
+5. Stores the PDF in SQLite and attaches it to the synthetic-exercise email.
+
+The UI shows queued, generating, sending, accepted, failed or unconfirmed delivery.
+Generated PDFs are downloadable even if SMTP rejects the message. Definite failures
+have an operator retry button; a saved PDF is reused rather than regenerating.
+If the connection breaks during SMTP submission, delivery is **unconfirmed**, and retry
+is disabled to avoid duplicates. Check the recipient inbox or mail-server logs.
+SMTP acceptance is not proof of inbox delivery.
+
+Approval authorises generation and dispatch, not a preview of Gemini's eventual text.
+AI prose is advisory and may be inaccurate; measurements are rendered separately from
+the stored observed data. No stock or containment actions are executed.
+
+### Reset and persistence
+
+A reset invalidates queued/in-progress generation from the old run before SMTP dispatch.
+An email already being submitted cannot be recalled. PDF/status records survive browser
+reloads, but the demo deliberately resets its simulation database on backend startup
+and on **Reset**. Download reports you want to retain. The schema version is bumped for
+the report workflow; older demo databases are rebuilt automatically.
+
+Replaying the simulation action log never calls Gemini or sends email. Asynchronous
+`REPORT_STATUS` events are excluded from deterministic replay comparisons.
+
+This is a **local demo**, with no production authentication, authority routing, durable
+mail queue or clinical validation. Do not expose it publicly or use real health data.
+
+## Validation
+
+```powershell
+.\.venv\Scripts\python -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python -m pytest backend\tests
+.\.venv\Scripts\python -m pytest engine\tests
+Set-Location frontend
 npm test
 npm run lint
 npm run build
-
-# End-to-end: Chromium and WebKit at 3 screen sizes. Starts ./dev.sh itself if
-# nothing is running on FRONTEND_PORT, otherwise reuses it.
-npx playwright install chromium webkit   # once per machine
-SHOTS=/tmp/shots npx playwright test     # screenshots go to $SHOTS
 ```
 
-Two dev-only scripts:
+Tests inject fake report services or mock Gemini/SMTP: **no real emails or paid API
+calls**. PDF tests parse generated documents, not just mocked filenames.
 
-- `scripts/lead_vs_r.py` measures lead time across outbreak growth rates.
-- `scripts/llm_smoke.py` makes one real Claude call. It needs a key.
+For a manual, paid Gemini-only smoke check (no email is ever sent):
 
-## Docs
+```powershell
+.\.venv\Scripts\python scripts\llm_smoke.py --output incident-report.pdf
+```
 
-- [docs/MATHS.md](docs/MATHS.md): every formula from first principles, the measured
-  results, and the limitations.
-- [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md): the 3-minute talk track and the likely
-  judge questions.
-- [docs/DEMO_CHECKLIST.md](docs/DEMO_CHECKLIST.md): setup and a click-by-click
-  walkthrough before presenting.
-- [docs/SPEC.md](docs/SPEC.md): the original pitch. [CLAUDE.md](CLAUDE.md) records
-  where the build departs from it.
+With backend and frontend already running, `npx playwright test` in `frontend` tests
+Chromium and WebKit at three viewport sizes. The e2e suite dismisses notifications;
+it never approves real email. Screenshot output uses `SHOTS` or the default
+`frontend/e2e/screenshots`. Automatic server startup uses the Unix `dev.sh`; on Windows,
+start both servers manually first.
+
+## Architecture and docs
+
+- `engine/`: seeded generator and pure statistical preprocessing/scoring/forecasting.
+- `backend/simulation.py`: observed-only ingestion, clock, transitions and operator decisions.
+- `backend/agent/executor.py`: incident creation and background report lifecycle.
+- `backend/agent/reporting.py`: Gemini structured output, ReportLab PDF and SMTP.
+- `frontend/`: React + TypeScript map, charts, incident summaries and notification approval.
+- The inventory API and pure allocation utilities remain for reference; incidents no
+  longer invoke them or mutate stock.
+
+See [the maths](docs/MATHS.md), [demo checklist](docs/DEMO_CHECKLIST.md) and
+[talk track](docs/DEMO_SCRIPT.md). [The original spec](docs/SPEC.md) and earlier phase
+briefs describe historical stock/Claude/rideshare behaviour; this reporting workflow
+replaces that incident-response phase.

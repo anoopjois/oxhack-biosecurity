@@ -1,140 +1,127 @@
-"""The LLM briefing path, with the Anthropic client mocked (no network)."""
+"""Gemini REST and SMTP boundaries are mocked: these tests never contact providers."""
 
+from dataclasses import replace
+from io import BytesIO
 import json
-import time
+import smtplib
+from unittest.mock import MagicMock
 
+import httpx
 import pytest
+from pypdf import PdfReader
 
-from backend import config
-from backend.agent import llm
-from backend.agent.llm import DIRECTIVE_SCHEMA, SYSTEM_PROMPT, ClaudeWriter, run_writer
-from backend.db import fetch_inventory
-
-from backend.tests.agent_helpers import (
-    OUTBREAK_ZONE, FakeAnthropic, FakeWriter, events, good_briefing, step_until_episode, wait_for,
-)
-
-CONTEXT = {"zone": {"name": "Greater Manchester"}, "allocation": {"transferred": {"ppe_units": 54770}}}
-GOOD = {"headline": "Greater Manchester: act now", "rationale": "54,770 PPE units arrived.",
-        "directives": [{"action": "Suspend pooled rides", "detail": "Done.", "priority": "immediate",
-                        "category": "mobility"}]}
+from backend.agent import reporting
+from backend.agent.reporting import DeliverySettings, DeliveryUnknown, ReportError, ReportService, render_pdf
+from backend.tests.agent_helpers import ASSESSMENT, OUTBREAK_ZONE, step_until_episode
 
 
-def _llm_status(sim, episode_id):
-    return sim.conn.execute("SELECT llm_status FROM agent_episodes WHERE episode_id = ?",
-                            (episode_id,)).fetchone()[0]
-
-
-def test_llm_async_never_blocks_clock(make_sim):
-    sim = make_sim(writer=FakeWriter(good_briefing, delay=2.0))
+@pytest.fixture
+def context(make_sim):
+    sim = make_sim()
     sim.trigger_outbreak(OUTBREAK_ZONE, 0.4)
-    started = time.perf_counter()
-    episode = step_until_episode(sim)
-    critical_step_s = time.perf_counter() - started  # includes every step up to the CRITICAL tick
-    assert critical_step_s < 2.0  # the 2 s LLM call did not hold up the clock
-
-    directives = events(sim, "type = 'AGENT_DIRECTIVE'")
-    assert [d["payload"]["source"] for d in directives] == ["template"]
-    assert _llm_status(sim, episode["episode_id"]) == "pending"
-
-    assert wait_for(lambda: len(events(sim, "type = 'AGENT_DIRECTIVE'")) == 2)
-    ai = events(sim, "type = 'AGENT_DIRECTIVE'")[1]
-    assert ai["payload"]["source"] == "llm"
-    assert ai["payload"]["source_label"] == "AI briefing (Claude)"
-    assert ai["payload"]["episode_id"] == episode["episode_id"]
-    assert ai["message"] == "AI briefing (Claude) · Greater Manchester: AI assessment"
-    row = sim.conn.execute("SELECT llm_status, directive_source FROM agent_episodes").fetchone()
-    assert tuple(row) == ("done", "llm")
+    return json.loads(step_until_episode(sim)["context"])
 
 
-@pytest.mark.parametrize("client, expected", [
-    (FakeAnthropic(text="not json"), "rejected:invalid_json"),
-    (FakeAnthropic(text=json.dumps({"headline": "x", "rationale": "y"})), "rejected:schema"),
-    (FakeAnthropic(text=json.dumps({**GOOD, "directives": [{**GOOD["directives"][0], "priority": "soon"}]})),
-     "rejected:schema"),
-    (FakeAnthropic(text=json.dumps({**GOOD, "rationale": "We sent 999,999 PPE."})), "rejected:unsupported_number"),
-    (FakeAnthropic(text=None, stop_reason="refusal"), "refused"),
-    (FakeAnthropic(raises=TimeoutError()), "failed:timeout"),
-    (FakeAnthropic(raises=RuntimeError("boom")), "failed:RuntimeError"),
+def settings():
+    return DeliverySettings(api_key="secret-key", model="gemini-2.5-flash",
+                            smtp_username="sender@example.com", smtp_password="app-password",
+                            smtp_from="sender@example.com", recipient="test@example.com")
+
+
+def response(text, finish="STOP"):
+    request = httpx.Request("POST", "https://example.com/gemini")
+    return httpx.Response(200, request=request, json={"candidates": [
+        {"finishReason": finish, "content": {"parts": [{"text": text}]}}]})
+
+
+def test_gemini_structured_request_and_professional_pdf(context, monkeypatch):
+    post = MagicMock(return_value=response(ASSESSMENT.model_dump_json()))
+    monkeypatch.setattr(reporting.httpx, "post", post)
+    pdf = ReportService(settings()).generate(context)
+    kwargs = post.call_args.kwargs
+    assert kwargs["headers"] == {"x-goog-api-key": "secret-key"}
+    assert kwargs["json"]["generationConfig"]["responseMimeType"] == "application/json"
+    assert "responseJsonSchema" in kwargs["json"]["generationConfig"]
+    submitted = json.loads(kwargs["json"]["contents"][0]["parts"][0]["text"])
+    assert submitted == context and submitted["synthetic"]
+    assert "secret-key" not in post.call_args.args[0]
+    text = "\n".join(page.extract_text() for page in PdfReader(BytesIO(pdf)).pages)
+    assert "SIMULATED DATA" in text and "gemini-2.5-flash" in text
+
+
+@pytest.mark.parametrize("result", [
+    response("not json"), response("{}"), response(ASSESSMENT.model_dump_json(), "MAX_TOKENS"),
+    httpx.Response(200, request=httpx.Request("POST", "https://example.com"), json={}),
+    httpx.Response(429, request=httpx.Request("POST", "https://example.com")),
 ])
-def test_llm_failures_are_classified(client, expected):
-    outcome = run_writer(ClaudeWriter(client=client), CONTEXT)
-    assert outcome.status == expected and outcome.briefing is None
+def test_invalid_or_failed_gemini_never_becomes_success(context, monkeypatch, result):
+    monkeypatch.setattr(reporting.httpx, "post", MagicMock(return_value=result))
+    with pytest.raises(ReportError):
+        ReportService(settings()).generate(context)
 
 
-def test_llm_failure_leaves_template_in_place(make_sim):
-    sim = make_sim(writer=ClaudeWriter(client=FakeAnthropic(text="not json")))
-    sim.trigger_outbreak(OUTBREAK_ZONE, 0.4)
-    episode = step_until_episode(sim)
-    assert wait_for(lambda: _llm_status(sim, episode["episode_id"]) != "pending")
-    assert _llm_status(sim, episode["episode_id"]) == "rejected:invalid_json"
-    assert [d["payload"]["source"] for d in events(sim, "type = 'AGENT_DIRECTIVE'")] == ["template"]
+def test_gemini_network_failure(context, monkeypatch):
+    monkeypatch.setattr(reporting.httpx, "post", MagicMock(side_effect=httpx.ConnectTimeout("secret-key")))
+    with pytest.raises(ReportError, match="could not be reached") as error:
+        ReportService(settings()).generate(context)
+    assert "secret-key" not in str(error.value)
 
 
-def test_llm_quantities_ignored(make_sim):
-    sneaky = {**GOOD, "transfers": [{"ppe_units": 999999}],
-              "directives": [{**GOOD["directives"][0], "quantity": 5}]}
-    outcome = run_writer(ClaudeWriter(client=FakeAnthropic(text=json.dumps(sneaky))), CONTEXT)
-    assert outcome.status == "done"
-    assert outcome.ignored_fields == ["transfers", "directives[0].quantity"]
-    assert "transfers" not in outcome.briefing.model_dump()
+def test_configuration_errors_are_actionable():
+    with pytest.raises(ReportError, match="GEMINI_API_KEY"):
+        ReportService(replace(settings(), api_key="")).validate_configuration()
+    with pytest.raises(ReportError, match="SMTP_PASSWORD"):
+        ReportService(replace(settings(), smtp_password="")).validate_configuration()
+    with pytest.raises(ReportError, match="SMTP_SECURITY"):
+        ReportService(replace(settings(), smtp_security="none")).validate_configuration()
+    ReportService(settings()).validate_configuration()
 
-    def sneaky_fn(context):
-        return {**good_briefing(context), "transfers": [{"ppe_units": 999999}]}
-
-    sim = make_sim(writer=FakeWriter(sneaky_fn, delay=0.3))
-    sim.trigger_outbreak(OUTBREAK_ZONE, 0.4)
-    step_until_episode(sim)
-    stock = fetch_inventory(sim.conn)
-    assert wait_for(lambda: len(events(sim, "type = 'AGENT_DIRECTIVE'")) == 2)
-    ai = events(sim, "type = 'AGENT_DIRECTIVE'")[1]["payload"]
-    assert ai["ignored_fields"] == ["transfers"] and "transfers" not in ai
-    assert fetch_inventory(sim.conn) == stock  # nothing the LLM said touched inventory
+@pytest.mark.parametrize("address", ["first@example.com,second@example.com", "not-an-email", "x@example.com\r\nBcc: y@example.com"])
+def test_only_one_valid_recipient_is_accepted(address):
+    with pytest.raises(ReportError, match="single email"):
+        ReportService(replace(settings(), recipient=address)).validate_configuration()
 
 
-def test_late_llm_result_after_reset_discarded(make_sim):
-    sim = make_sim(writer=FakeWriter(good_briefing, delay=1.0))
-    sim.trigger_outbreak(OUTBREAK_ZONE, 0.4)
-    step_until_episode(sim)
-    generation = sim.generation
-    sim.reset()
-    assert sim.generation == generation + 1
-    time.sleep(1.5)  # the job finishes after the reset
-    assert events(sim, "type = 'AGENT_DIRECTIVE'") == []
-    assert sim.conn.execute("SELECT COUNT(*) FROM agent_episodes").fetchone()[0] == 0
+@pytest.mark.parametrize("security", ["starttls", "ssl"])
+def test_smtp_sends_one_synthetic_email_with_real_pdf(context, monkeypatch, security):
+    smtp = MagicMock()
+    factory = MagicMock(return_value=smtp)
+    monkeypatch.setattr(reporting.smtplib, "SMTP_SSL" if security == "ssl" else "SMTP", factory)
+    service = ReportService(replace(settings(), smtp_security=security))
+    pdf = render_pdf(context, ASSESSMENT, service.settings.model)
+    service.send(context, pdf)
+    smtp.send_message.assert_called_once()
+    message = smtp.send_message.call_args.args[0]
+    assert str(message["To"]) == context["recipient"]
+    assert "[SIMULATED EXERCISE]" in message["Subject"]
+    assert "SIMULATED DATA" in message.get_body().get_content()
+    [attachment] = list(message.iter_attachments())
+    assert attachment.get_content_type() == "application/pdf"
+    assert attachment.get_payload(decode=True) == pdf
+    smtp.close.assert_called_once()
+    if security == "starttls":
+        smtp.starttls.assert_called_once()
 
 
-def test_no_api_key_means_template_only(monkeypatch, tmp_path):
-    from backend.simulation import Simulation
-
-    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
-    assert llm.make_writer() is None
-    sim = Simulation(config.Settings(db_path=tmp_path / "nokey.sqlite3"))  # default writer from config
-    try:
-        assert sim.agent.worker is None
-        sim.trigger_outbreak(OUTBREAK_ZONE, 0.4)
-        episode = step_until_episode(sim)
-        assert episode["llm_status"] == "not_configured"
-    finally:
-        sim.close()
-
-    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-test-not-real")
-    assert isinstance(llm.make_writer(), ClaudeWriter)  # constructing the client makes no request
+@pytest.mark.parametrize("failure, expected", [
+    (smtplib.SMTPAuthenticationError(535, b"password-secret"), ReportError),
+    (smtplib.SMTPRecipientsRefused({"x": (550, b"rejected")}), ReportError),
+    (TimeoutError("network-secret"), DeliveryUnknown),
+])
+def test_smtp_error_classification_and_secret_redaction(context, monkeypatch, failure, expected):
+    smtp = MagicMock()
+    smtp.send_message.side_effect = failure
+    monkeypatch.setattr(reporting.smtplib, "SMTP", MagicMock(return_value=smtp))
+    with pytest.raises(expected) as error:
+        ReportService(settings()).send(context, b"%PDF-test")
+    assert "secret" not in str(error.value)
 
 
-def test_llm_request_shape(monkeypatch):
-    fake = FakeAnthropic(text=json.dumps(GOOD))
-    ClaudeWriter(client=fake).write(CONTEXT)
-    [kwargs] = fake.calls
-    assert kwargs["model"] == config.LLM_MODEL == "claude-opus-5-5"
-    assert kwargs["betas"] == [config.LLM_FALLBACK_BETA] and kwargs["fallbacks"] == "default"
-    assert kwargs["output_config"] == {"effort": "low",
-                                       "format": {"type": "json_schema", "schema": DIRECTIVE_SCHEMA}}
-    assert kwargs["system"] == SYSTEM_PROMPT
-    assert json.loads(kwargs["messages"][0]["content"]) == CONTEXT
-    assert "quantities" not in json.dumps(DIRECTIVE_SCHEMA["properties"])  # no quantity fields to fill
-
-    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-test-not-real")
-    real_client = ClaudeWriter().client
-    assert real_client.timeout == config.LLM_TIMEOUT_S == 15
-    assert real_client.max_retries == config.LLM_MAX_RETRIES
+def test_pdf_escapes_ai_markup_and_paginates(context):
+    long = ASSESSMENT.model_copy(update={"assessment": "<b>Literal & safe</b> " * 180})
+    pdf = render_pdf(context, long, "test")
+    reader = PdfReader(BytesIO(pdf))
+    assert len(reader.pages) > 1
+    text = "\n".join(page.extract_text() for page in reader.pages)
+    assert "<b>Literal & safe</b>" in text
+    assert all("SYNTHETIC EXERCISE" in page.extract_text() for page in reader.pages)

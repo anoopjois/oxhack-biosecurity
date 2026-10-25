@@ -5,6 +5,11 @@ computes them, and then reports what we measured and what we have not shown.
 
 **All data is synthetic.** Section 6 explains why that matters.
 
+The engine maths below is unchanged. Historical inventory/allocation sections describe
+the earlier demo: the current incident workflow instead requires explicit approval
+for a Gemini-generated PDF and SMTP notification, and never executes stock transfers.
+See the [current workflow](../README.md#what-approval-does).
+
 Every constant named here lives in `engine/config.py` (the maths) or `backend/config.py`
 (the inventory and the agent). All windows are in **days**. "Today" is day `t`.
 

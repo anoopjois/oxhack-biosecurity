@@ -2,7 +2,9 @@
 
 import json
 import time
-from types import SimpleNamespace
+from threading import Event
+
+from backend.agent.reporting import Assessment, DeliverySettings, ReportService, render_pdf
 
 from backend.simulation import Simulation, Transition
 
@@ -49,9 +51,8 @@ def force_transitions(sim: Simulation, changes: list[tuple[str, str, str, float]
                                      r_hat=0.4, se_r=0.05, doubling_days=1.7, z_W=8.0, z_E=3.0)
             event = sim._add_event(day, "STATUS_CHANGE", "critical", zip_code, "test", {"from": old, "to": new})
             transitions.append(Transition(zip_code, old, new, day, event["event_id"], results[zip_code]))
-        jobs = sim.agent.handle_transitions(sim, day, transitions, results)
+        sim.agent.handle_transitions(sim, day, transitions, results)
         sim._results = results
-    sim.agent.submit(jobs, sim.generation)
     return transitions
 
 
@@ -64,38 +65,39 @@ def wait_for(predicate, timeout=5.0, interval=0.02) -> bool:
     return False
 
 
-class FakeWriter:
-    """Stands in for ClaudeWriter: returns fn(context) after `delay` seconds (or raises)."""
-    model = "fake-model"
-
-    def __init__(self, fn, delay: float = 0.0):
-        self.fn, self.delay = fn, delay
-
-    def write(self, context: dict) -> dict:
-        time.sleep(self.delay)
-        return self.fn(context)
+ASSESSMENT = Assessment(
+    executive_summary="A synthetic wastewater signal warrants authority review.",
+    assessment="The forecast indicates rising risk, with significant uncertainty.",
+    recommended_actions=["Verify the signal with the responsible surveillance team.",
+                         "Review local preparedness using established procedures."],
+    limitations="All data is synthetic. No pathogen or diagnosis is established.")
 
 
-def good_briefing(context: dict) -> dict:
-    return {"headline": f"{context['zone']['name']}: AI assessment",
-            "rationale": "Growth is significant and hospital demand lags wastewater.",
-            "directives": [{"action": "Keep pooled rides suspended", "detail": "Already executed.",
-                            "priority": "immediate", "category": "mobility"}]}
+class FakeReportService(ReportService):
+    """No provider or SMTP network calls, even when the local .env contains keys."""
+    def __init__(self):
+        super().__init__(DeliverySettings(api_key="fake", recipient="test@example.com", model="fake-gemini"))
+        self.generated = []
+        self.sent = []
+        self.error = None
+        self.generate_started = Event()
+        self.generate_release = Event()
+        self.generate_release.set()
+        self.finished = Event()
 
+    def validate_configuration(self):
+        pass
 
-class FakeAnthropic:
-    """Minimal stand-in for anthropic.Anthropic: records the request, returns a canned response."""
+    def generate(self, context):
+        self.generated.append(context)
+        self.generate_started.set()
+        assert self.generate_release.wait(timeout=5)
+        return render_pdf(context, ASSESSMENT, self.settings.model)
 
-    def __init__(self, text: str | None = None, stop_reason: str = "end_turn", raises: Exception | None = None):
-        self.calls = []
-        outer = self
-
-        class _Messages:
-            def create(self, **kwargs):
-                outer.calls.append(kwargs)
-                if raises is not None:
-                    raise raises
-                content = [] if text is None else [SimpleNamespace(type="text", text=text)]
-                return SimpleNamespace(stop_reason=stop_reason, content=content)
-
-        self.beta = SimpleNamespace(messages=_Messages())
+    def send(self, context, pdf):
+        try:
+            if self.error:
+                raise self.error
+            self.sent.append((context, pdf))
+        finally:
+            self.finished.set()

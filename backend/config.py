@@ -10,15 +10,23 @@ from dotenv import load_dotenv
 REPO_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(REPO_ROOT / ".env")
 
-# LLM (agent rationale and directives only; quantities are never set by the LLM)
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "claude-opus-5-5")
-LLM_EFFORT = os.getenv("LLM_EFFORT", "low")       # a short, structured writing task
-LLM_TIMEOUT_S = 15.0                               # per HTTP attempt
-LLM_MAX_RETRIES = 1                                # so at most ~30 s wall clock
-LLM_MAX_TOKENS = 4000
-LLM_WORKERS = 2                                    # background threads for LLM jobs
-LLM_FALLBACK_BETA = "server-side-fallback-2026-07-01"  # enables fallbacks="default"
+# Approved incident reports. Secrets stay in .env.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+REPORT_TIMEOUT_S = float(os.getenv("REPORT_TIMEOUT_S", "30"))
+REPORT_WORKERS = 2
+REPORT_MAX_TOKENS = 4096
+REPORT_TEXT_MAX_CHARS = 6000
+REPORT_ACTIONS_RANGE = (1, 6)
+ALERT_RECIPIENT = os.getenv("ALERT_RECIPIENT", "daeyad1@gmail.com")
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USERNAME)
+SMTP_SECURITY = os.getenv("SMTP_SECURITY", "starttls")
+SYNTHETIC_NOTICE = "SIMULATED DATA - EXERCISE ONLY - NOT A REAL PUBLIC HEALTH ALERT"
 
 # Storage
 DB_PATH = REPO_ROOT / os.getenv("DB_PATH", "backend/biosecurity.sqlite3")
@@ -50,26 +58,6 @@ EARTH_RADIUS_KM = 6371.0  # for the haversine distance
 # Agent: donor reserve, in days of normal use (see reserve_days in backend/agent/allocation.py)
 NORMAL_STOCK_DAYS = 7.0   # a hub's normal per-capita stock l_k*P lasts this many days at normal use
 
-# Agent: human approval of stock moves. The tick only proposes transfers; stock moves when an
-# operator approves, or automatically once nobody has objected for APPROVAL_TIMEOUT_S seconds.
-# The simulation clock is held while a decision is pending. 0 = no approval step (moves in the tick).
-APPROVAL_TIMEOUT_S = float(os.getenv("APPROVAL_TIMEOUT_S", "30"))
-APPROVAL_POLL_S = 0.25    # how often the server checks for expired approvals
-
-# Agent: rideshare containment (mock webhook)
-RIDESHARE_REVIEW_DAYS = 7
-RIDESHARE_RADIUS_KM = 25.0
-
-# Agent: briefing rules and validation
-NEIGHBOUR_COUNT = 5         # nearest zones considered "neighbours"
-FAST_DOUBLING_DAYS = 3.0    # doubling faster than this triggers A&E surge staffing
-TRANSIT_MOBILITY_M = 0.5    # M above this adds transit guidance to the public advisory
-HEADLINE_MAX_CHARS = 140
-RATIONALE_MAX_CHARS = 1500
-DIRECTIVES_RANGE = (1, 6)
-NUMBER_CHECK_MIN = 100      # every integer >= this in briefing text must appear in the context
-SOURCE_LABELS = {"template": "Rule-based briefing", "llm": "AI briefing (Claude)"}
-
 # Events API
 EVENTS_DEFAULT_LIMIT = 100
 EVENTS_MAX_LIMIT = 1000
@@ -84,4 +72,3 @@ class Settings:
     seed: int = SIM_SEED
     start_date: date = date.fromisoformat(SIM_START_DATE)
     seconds_per_day: float = CLOCK_SECONDS_PER_DAY
-    approval_timeout_s: float = APPROVAL_TIMEOUT_S

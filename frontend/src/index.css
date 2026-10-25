@@ -420,68 +420,19 @@ kbd {
 .empty { font-size: 0.9rem; }
 .incident { border-radius: 10px; border: 1px solid var(--line); padding: var(--s3) var(--s4); }
 .incident.phase-critical { border-color: var(--critical-line); box-shadow: inset 4px 0 0 var(--critical); }
-.incident.phase-watching { box-shadow: inset 4px 0 0 var(--elevated); }
 .incident-head { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
 .incident-name { border: 0; background: none; padding: 0; font-size: 1.02rem; font-weight: 750; margin-right: auto; cursor: pointer; text-align: left; }
 .incident-name:hover { text-decoration: underline; }
 .since { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
-.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 0.875rem; }
-.step strong { font-size: 0.92rem; }
-.step p, .step-body { color: var(--ink-2); }
-.step-dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; margin-top: 1px; }
-.step-done .step-dot { background: var(--accent); color: #fff; }
-.step-critical .step-dot { background: var(--critical); }
-.step-todo { color: var(--faint); }
-.step-todo .step-dot { border: 2px solid var(--todo-ring); }
-.step-todo p { color: var(--faint); }
-/* The simulated spike is ground truth for the audience only: greyed and dashed. */
-.step-sim { color: var(--muted); }
-.step-sim .step-dot { border: 2px dashed var(--hatch-edge); background: repeating-linear-gradient(45deg, var(--hatch-a) 0 3px, var(--hatch-b) 3px 6px); }
-.step-sim strong { font-weight: 650; }
-.step-sim p { color: var(--muted); font-style: italic; }
-.tag-hidden { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em; color: var(--muted); border: 1.5px dashed var(--line-strong); border-radius: 999px; padding: 0 7px; white-space: nowrap; }
-.stock-line { display: flex; flex-wrap: wrap; gap: 2px 14px; font-variant-numeric: tabular-nums; color: var(--ink); }
-.stock-line b { color: var(--accent-ink); }
-.stock-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-.stock-table th, .stock-table td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.stock-table th:first-child, .stock-table td:first-child { text-align: left; white-space: normal; }
-.stock-table .target-row td { font-weight: 700; color: var(--ink); }
-.stock-table .short-row td { color: var(--critical-ink); }
-/* Human approval of a stock move: countdown ring, then Approve now / Override. */
-.step-await .step-dot { background: var(--surface); border: 2px solid var(--accent); color: var(--accent-ink); animation: await-pulse 1.6s ease-in-out infinite; }
-@keyframes await-pulse { 50% { box-shadow: 0 0 0 4px var(--accent-soft); } }
-.step-overridden .step-dot { background: var(--ink-2); color: var(--surface); }
-.approval {
-  display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px 10px; align-items: center; margin-top: 8px;
-  padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--accent);
-  /* Pinned to the bottom of the scrolling incident list, so the buttons are never below the fold. */
-  position: sticky; bottom: 0; z-index: 1; box-shadow: 0 -6px 16px var(--surface);
+.incident > p { color: var(--ink-2); font-size: 0.9rem; line-height: 1.5; }
+.approval-box {
+  display: grid; gap: var(--s2); margin-top: var(--s3); padding: var(--s3);
+  border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--accent);
+  overflow-wrap: anywhere; font-size: 0.875rem; line-height: 1.5;
 }
-.approval-ring { width: 40px; height: 40px; }
-.approval-ring .ring-track { fill: none; stroke: var(--line-strong); stroke-width: 3; }
-.approval-ring .ring-left { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset 0.25s linear; }
-.approval-ring text { font-size: 11px; font-weight: 800; fill: var(--ink); font-variant-numeric: tabular-nums; }
-.approval-text { display: grid; gap: 2px; }
-.approval-text strong { color: var(--ink); font-variant-numeric: tabular-nums; }
-.approval-text span { font-size: 0.8rem; color: var(--ink-2); }
-.approval-actions { grid-column: 1 / -1; display: flex; gap: var(--s2); }
-.donor-safety { display: flex; gap: 6px; align-items: flex-start; margin-top: 4px; font-size: 0.85rem; color: var(--ink-2); }
-.donor-safety b { color: var(--ink); font-variant-numeric: tabular-nums; }
-.decision-tag { margin-top: 4px; font-weight: 700; font-size: 0.85rem; color: var(--accent-ink); }
-.briefing-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 3px; }
-.briefing-updated { animation: flash 1.6s ease-out; border-radius: 6px; }
-@keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
-.source { font-size: 0.7rem; font-weight: 750; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
-.source-template { background: var(--source-template); color: var(--ink-2); }
-.source-llm { background: var(--accent); color: #fff; }
-.updated-tag { font-size: 0.72rem; font-weight: 700; color: var(--accent-ink); }
-.briefing-body { margin-top: 6px; display: grid; gap: 6px; }
-.rationale { color: var(--ink-2); }
-.directives { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.directives li { display: grid; grid-template-columns: 5.6rem minmax(0, 1fr); gap: 8px; align-items: start; }
-.directives strong { color: var(--ink); }
-.priority { text-align: center; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.05em; padding: 2px 4px; border-radius: 6px; }
+.approval-box p { margin: 0; color: var(--ink-2); }
+.approval-box .popover-actions { flex-wrap: wrap; }
+.approval-box a { color: var(--accent-ink); font-weight: 650; }
 .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; color: var(--ink-2); cursor: pointer; }
 .log-list { list-style: none; margin: 0; padding: 0; gap: 4px; }
 .log-row { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr); gap: 8px; font-size: 0.85rem; padding: 4px 0 4px 8px; border-left: 3px solid var(--line-strong); }

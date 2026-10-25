@@ -45,8 +45,7 @@ class ZoneStatus(BaseModel):
 class PendingApproval(BaseModel):
     episode_id: int
     zip_code: str
-    seconds_left: float  # until it auto-approves (relative, so client clock skew doesn't matter)
-    timeout_s: float
+    recipient: str
 
 
 class MapStatus(BaseModel):

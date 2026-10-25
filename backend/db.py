@@ -61,8 +61,7 @@ CREATE TABLE IF NOT EXISTS events (
     sim_date   TEXT NOT NULL,
     created_at TEXT NOT NULL,                        -- wall clock; excluded from reproducibility
     type       TEXT NOT NULL,                        -- STATUS_CHANGE | OUTBREAK_INJECTED | TIMELINE_END |
-                                                     -- AGENT_ALLOCATION | AGENT_DECISION | AGENT_DIRECTIVE |
-                                                     -- RIDESHARE_WEBHOOK
+                                                     -- INCIDENT_OPENED | INCIDENT_DECISION | REPORT_STATUS
     severity   TEXT NOT NULL,                        -- info | warning | critical
     zip_code   TEXT REFERENCES zones,
     message    TEXT NOT NULL,
@@ -75,13 +74,16 @@ CREATE TABLE IF NOT EXISTS agent_episodes (
     status_event_id  INTEGER NOT NULL UNIQUE REFERENCES events,  -- exactly once per CRITICAL episode
     opened_date      TEXT NOT NULL,
     closed_date      TEXT,
-    context          TEXT NOT NULL,                  -- JSON given to the template and the LLM
-    llm_status       TEXT NOT NULL,                  -- not_configured | pending | done | refused | failed:* | rejected:*
-    directive_source TEXT NOT NULL,                  -- template | llm
-    plan             TEXT NOT NULL,                  -- JSON: the proposed transfers (moved only once approved)
+    context          TEXT NOT NULL,                  -- observed data at detection; never ground truth
+    summary          TEXT NOT NULL,
+    recipient        TEXT NOT NULL,
     decision         TEXT NOT NULL,                  -- pending | approved | overridden
-    decided_by       TEXT,                           -- operator | timeout | policy (no approval step)
-    decided_date     TEXT
+    decided_by       TEXT,
+    decided_date     TEXT,
+    report_status    TEXT NOT NULL,                  -- awaiting_approval | queued | generating | sending | sent | failed | delivery_unknown | rejected
+    report_error     TEXT,
+    report_pdf       BLOB,
+    report_model     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS transfers (
@@ -102,7 +104,7 @@ CREATE TABLE IF NOT EXISTS transfers (
 CREATE TABLE IF NOT EXISTS actions (
     seq      INTEGER PRIMARY KEY AUTOINCREMENT,
     sim_date TEXT NOT NULL,
-    kind     TEXT NOT NULL,                          -- reset | step | trigger_outbreak | decide_allocation
+    kind     TEXT NOT NULL,                          -- reset | step | trigger_outbreak | decide_alert
     payload  TEXT NOT NULL                           -- JSON
 );
 """
@@ -122,7 +124,7 @@ def connect(path: Path) -> sqlite3.Connection:
 
 # Bump when the schema changes. Every table holds state a reset regenerates (zones is reloaded
 # from zones.csv at startup), so on a mismatch we simply drop and recreate everything.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 ALL_TABLES = ["transfers", "agent_episodes", "zone_status", "telemetry_logs", "hospital_inventories",
               "events", "actions", "zones"]
 

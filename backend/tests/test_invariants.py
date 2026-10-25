@@ -73,7 +73,7 @@ def test_schema_version_mismatch_rebuilds(tmp_path):
     old.execute("PRAGMA user_version = 1")
     old.commit()
     old.close()
-    sim = Simulation(Settings(db_path=path), directive_writer=None)
+    sim = Simulation(Settings(db_path=path))
     try:
         assert sim.conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         assert all(z["er_baseline"] is not None for z in sim.map_status()["zones"])

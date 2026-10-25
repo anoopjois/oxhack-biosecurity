@@ -9,30 +9,31 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from backend import config, db
-from backend.clock import run_approvals, run_clock
+from backend.clock import run_clock
+from backend.agent.reporting import ReportService
 from backend.schemas import (
     ClockResponse, DecisionResponse, EventsResponse, InventoryResponse, MapStatus, PlayRequest,
     ResetRequest, StepResponse, TriggerRequest, TriggerResponse, ZoneHistory,
 )
-from backend.simulation import DEFAULT_WRITER, Simulation, SimulationError
+from backend.simulation import Simulation, SimulationError
 from engine.zones import load_zones
 
 P = config.API_PREFIX
 
 
-def create_app(settings: config.Settings | None = None, directive_writer=DEFAULT_WRITER) -> FastAPI:
-    """directive_writer: the LLM briefing writer (default: Claude if a key is set; None = rule-based only)."""
+def create_app(settings: config.Settings | None = None, report_service: ReportService | None = None) -> FastAPI:
+    """Tests inject a fake report service so they never call Gemini or send real email."""
     settings = settings or config.Settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        sim = Simulation(settings, directive_writer=directive_writer)
+        sim = Simulation(settings, report_service=report_service)
         control = asyncio.Event()
         app.state.sim, app.state.control = sim, control
-        tasks = [asyncio.create_task(run_clock(sim, control)), asyncio.create_task(run_approvals(sim))]
+        tasks = [asyncio.create_task(run_clock(sim, control))]
         yield
         for task in tasks:
             task.cancel()
@@ -88,13 +89,24 @@ def create_app(settings: config.Settings | None = None, directive_writer=DEFAULT
 
     @app.post(f"{P}/episodes/{{episode_id}}/approve", response_model=DecisionResponse)
     async def approve(request: Request, episode_id: int):
-        """An operator approves a proposed stock move: the stock moves now."""
+        """Approve generating and emailing the synthetic incident report."""
         return await asyncio.to_thread(sim(request).decide, episode_id, "approve")
 
     @app.post(f"{P}/episodes/{{episode_id}}/override", response_model=DecisionResponse)
     async def override(request: Request, episode_id: int):
-        """An operator overrides (rejects) a proposed stock move: nothing moves."""
+        """Dismiss the incident notification without sending email."""
         return await asyncio.to_thread(sim(request).decide, episode_id, "override")
+
+    @app.post(f"{P}/episodes/{{episode_id}}/retry", response_model=DecisionResponse)
+    async def retry_report(request: Request, episode_id: int):
+        return await asyncio.to_thread(sim(request).retry_report, episode_id)
+
+    @app.get(f"{P}/episodes/{{episode_id}}/report.pdf")
+    async def report_pdf(request: Request, episode_id: int):
+        pdf = sim(request).report_pdf(episode_id)
+        return Response(content=pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="biosecure-incident-{episode_id}.pdf"',
+                                 "Cache-Control": "no-store"})
 
     @app.post(f"{P}/clock/play", response_model=ClockResponse)
     async def play(request: Request, body: PlayRequest | None = None):
