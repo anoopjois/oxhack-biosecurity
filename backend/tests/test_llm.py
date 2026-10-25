@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
+from pydantic import ValidationError
 from pypdf import PdfReader
 
 from backend.agent import reporting
@@ -45,8 +46,51 @@ def test_gemini_structured_request_and_professional_pdf(context, monkeypatch):
     submitted = json.loads(kwargs["json"]["contents"][0]["parts"][0]["text"])
     assert submitted == context and submitted["synthetic"]
     assert "secret-key" not in post.call_args.args[0]
+    prompt = kwargs["json"]["systemInstruction"]["parts"][0]["text"]
+    for requirement in ("NHS ICB", "responsible team", "timeframe", "concrete task",
+                        "UKHSA Health Protection", "Director of Public Health",
+                        "case counts", "test inbox", str(reporting.config.REPORT_MAX_WORDS)):
+        assert requirement in prompt
     text = "\n".join(page.extract_text() for page in PdfReader(BytesIO(pdf)).pages)
     assert "SIMULATED DATA" in text and "gemini-3.8-flash" in text
+    assert f"Intended authority: NHS {context['zone']['name']} ICB" in text
+    assert f"Test delivery address: {context['recipient']}" in text
+    assert "does not notify those authorities" in text
+    assert "Priority next steps for ICB review" in text
+
+
+def test_report_word_limit_accepts_boundary_and_rejects_excess():
+    data = ASSESSMENT.model_dump()
+    other_words = sum(len(text.split()) for text in
+                      [data["assessment"], data["limitations"], *data["recommended_actions"]])
+    data["executive_summary"] = "word " * (reporting.config.REPORT_MAX_WORDS - other_words)
+    reporting.Assessment.model_validate(data)
+    data["executive_summary"] += "extra"
+    with pytest.raises(ValidationError, match="word limit"):
+        reporting.Assessment.model_validate(data)
+
+
+@pytest.mark.parametrize("count", [0, 2, 5])
+def test_report_requires_three_or_four_actions(count):
+    data = ASSESSMENT.model_dump()
+    data["recommended_actions"] = ["ICB duty team: review readiness today."] * count
+    with pytest.raises(ValidationError):
+        reporting.Assessment.model_validate(data)
+
+
+@pytest.mark.parametrize("count", [3, 4])
+def test_report_accepts_action_count_boundaries(count):
+    data = ASSESSMENT.model_dump()
+    data["recommended_actions"] = ["ICB duty team: review readiness today."] * count
+    assert len(reporting.Assessment.model_validate(data).recommended_actions) == count
+
+
+def test_overlong_gemini_report_fails_visibly(context, monkeypatch):
+    data = ASSESSMENT.model_dump()
+    data["assessment"] = "word " * reporting.config.REPORT_MAX_WORDS
+    monkeypatch.setattr(reporting.httpx, "post", MagicMock(return_value=response(json.dumps(data))))
+    with pytest.raises(ReportError, match="invalid incident report"):
+        ReportService(settings()).generate(context)
 
 
 @pytest.mark.parametrize("result", [
@@ -116,6 +160,10 @@ def test_smtp_sends_one_synthetic_email_with_real_pdf(context, monkeypatch, secu
     assert str(message["To"]) == context["recipient"]
     assert "[SIMULATED EXERCISE]" in message["Subject"]
     assert "SIMULATED DATA" in message.get_body().get_content()
+    body = message.get_body().get_content()
+    assert f"Intended authority: NHS {context['zone']['name']} ICB" in body
+    assert f"Test delivery address: {context['recipient']}" in body
+    assert "These teams are not emailed by this app" in body
     [attachment] = list(message.iter_attachments())
     assert attachment.get_content_type() == "application/pdf"
     assert attachment.get_payload(decode=True) == pdf

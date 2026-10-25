@@ -29,6 +29,9 @@ def test_incident_does_not_move_stock_or_run_old_actions(make_sim):
     context = json.loads(episode["context"])
     assert context["synthetic"]
     assert "viral outbreak risk" in episode["summary"].lower()
+    assert "NHS Greater Manchester ICB preparedness review" in episode["summary"]
+    assert "configured delivery address" in episode["summary"]
+    assert "test" not in episode["summary"].lower()
     assert "synthetic" not in episode["summary"].lower()
     assert events(sim, "type = 'INCIDENT_OPENED'")[0]["payload"]["summary"] == episode["summary"]
     assert context["observed"]["status"] == "CRITICAL"

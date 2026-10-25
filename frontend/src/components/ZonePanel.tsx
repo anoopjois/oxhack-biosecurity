@@ -65,11 +65,11 @@ function Caption({ alert, hit, status }: { alert?: string; hit?: string; status:
     const days = daysBetween(alert, hit)
     lead = true
     text = days > 0
-      ? <>⚡ Outbreak alert raised <b>{days} day{days === 1 ? '' : 's'}</b> before the observed risk index reached 80</>
-      : <>⚡ Outbreak alert raised the same day the observed risk index reached 80</>
+      ? <>Outbreak alert raised <b>{days} day{days === 1 ? '' : 's'}</b> before the observed risk index reached 80</>
+      : <>Outbreak alert raised the same day the observed risk index reached 80</>
   } else if (alert) {
     lead = true
-    text = <>⚡ Outbreak alert raised {shortDate(alert)} from the 48-hour forecast and clear viral growth.</>
+    text = <>Outbreak alert raised {shortDate(alert)} from the 48-hour forecast and clear viral growth.</>
   } else if (status === 'CRITICAL') {
     text = <>Critical outbreak alert. Review the risk forecast and observed viral trend.</>
   } else if (status === 'ELEVATED') {

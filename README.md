@@ -110,6 +110,16 @@ credentials and sender address. Use `SMTP_SECURITY=ssl` and the provider's TLS p
 The recipient defaults to **daeyad1@gmail.com**, a test inbox, not an official authority.
 `ALERT_RECIPIENT` is one configured address for all zones; jurisdiction-based authority
 routing is not implemented. Change it only when an authorised recipient is agreed.
+Approval cards, PDFs and emails name the affected **NHS ICB as the intended authority**
+for an early warning and situation report. The dashboard labels the configured inbox
+as **Delivery address** and sends only there. PDFs and emails retain exercise labels
+and identify the test delivery address: approving does **not** separately contact the
+ICB, UKHSA or local authority.
+In real use, the ICB coordinates NHS preparedness and clinical-service planning,
+in liaison with the local UKHSA Health Protection Team and local authority
+Director of Public Health for outbreak assessment and response:
+[UKHSA health protection teams](https://www.gov.uk/health-protection-team) and
+[NHS England ICB outbreak-response guidance](https://www.england.nhs.uk/publication/clinical-response-to-local-incidents-and-outbreaks-of-infectious-disease-commissioning-guidance-for-icbs/).
 Use a model available to your Gemini API key; `GEMINI_MODEL` is configurable.
 Gemini can list retired models in metadata while rejecting generation for new users.
 If generation returns HTTP 404, use a currently supported model and restart the backend;
@@ -129,7 +139,11 @@ Settings load at process startup, so configure them before the demo.
 3. Sends only the detection-time observed snapshot to Gemini, never future telemetry,
    injected outbreak ground truth or secrets.
 4. Validates structured JSON and builds a paginated PDF with an executive summary,
-   verified evidence table, AI assessment, recommendations and limitations.
+   verified evidence table, AI assessment, recommendations and limitations. The narrative
+   is capped at 350 words with three or four prioritised proposed actions. Gemini is
+   instructed to name a responsible team, timeframe and concrete task for each,
+   covering signal verification, public-health liaison, NHS readiness and the next review.
+   These are advisory proposals, not clinical orders or actions already executed.
 5. Stores the PDF in SQLite and attaches it to the synthetic-exercise email.
 
 The UI shows queued, generating, sending, accepted, failed or unconfirmed delivery.
