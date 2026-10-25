@@ -63,7 +63,7 @@ export function Header(p: Props) {
   return (
     <header className="header">
       <div className="brand">
-        <h1><img className="brand-logo" src={biosecureLogo} alt="BioSecure" width="1150" height="380" /></h1>
+        <h1><img className="brand-logo" src={biosecureLogo} alt="BioSecure" width="876" height="166" /></h1>
         <p>Viral outbreak early warning</p>
       </div>
 

@@ -217,7 +217,7 @@ button { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
 .brand h1 { flex: none; }
-.brand-logo { display: block; width: 128px; height: auto; border-radius: 4px; }
+.brand-logo { display: block; width: 148px; height: auto; border-radius: 4px; }
 .brand p { font-size: 0.75rem; color: var(--ink-2); white-space: nowrap; }
 .when { flex: 1; text-align: center; line-height: 1.15; min-width: 180px; }
 .when-date { display: block; font-size: 1.4rem; font-weight: 750; white-space: nowrap; }
@@ -616,6 +616,7 @@ kbd {
 @media (max-width: 480px) {
   .header { grid-template-columns: minmax(0, 1fr); padding: var(--s3); }
   .brand { flex-wrap: wrap; row-gap: var(--s1); }
+  .brand-logo { width: 116px; }
   .when { text-align: left; min-width: 0; }
   .controls { gap: var(--s2); }
   .controls > .group { width: 100%; justify-content: space-between; }
