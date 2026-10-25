@@ -31,7 +31,8 @@ class Agent:
             summary = (f"{zone.zone_name} crossed the critical early-warning threshold for viral outbreak risk. "
                        f"Outbreak risk now: {metric(observed['score'])}/100; forecast in 48 hours: "
                        f"{metric(observed['projected_score'])}/100. "
-                       "Review the observed signals and approve an outbreak report notification.")
+                       f"Review the observed signals and approve an early-warning situation report "
+                       f"for NHS {zone.zone_name} ICB preparedness review via the configured test inbox.")
             recipient = self.service.settings.recipient
             cursor = sim.conn.execute(
                 """INSERT INTO agent_episodes

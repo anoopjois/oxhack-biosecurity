@@ -13,7 +13,7 @@ from typing import Annotated
 from xml.sax.saxutils import escape
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
@@ -33,6 +33,14 @@ class Assessment(BaseModel):
     recommended_actions: list[Text] = Field(
         min_length=config.REPORT_ACTIONS_RANGE[0], max_length=config.REPORT_ACTIONS_RANGE[1])
     limitations: Text
+
+    @model_validator(mode="after")
+    def check_length(self) -> "Assessment":
+        sections = [self.executive_summary, self.assessment, self.limitations,
+                    *self.recommended_actions]
+        if sum(len(section.split()) for section in sections) > config.REPORT_MAX_WORDS:
+            raise ValueError("Report narrative exceeds the configured word limit.")
+        return self
 
 
 class ReportError(Exception):
@@ -77,7 +85,11 @@ def render_pdf(context: dict, assessment: Assessment, model: str) -> bytes:
         paragraph("BioSecure | Incident Report", "Title"),
         paragraph(config.SYNTHETIC_NOTICE, "Heading3"),
         paragraph(f"{zone['name']} | Detection date: {context['detected_date']}"),
-        paragraph(f"Incident {context['episode_id']} | Recipient: {context['recipient']}"),
+        paragraph(f"Incident {context['episode_id']} | Intended authority: NHS {zone['name']} ICB"),
+        paragraph(f"Test delivery address: {context['recipient']}"),
+        paragraph("For ICB NHS preparedness review and liaison with the local UKHSA Health "
+                  "Protection Team and local authority public-health team. Delivery to this "
+                  "test inbox does not notify those authorities."),
         Spacer(1, 6 * mm),
         paragraph("Executive summary", "Heading2"),
         paragraph(assessment.executive_summary),
@@ -106,7 +118,7 @@ def render_pdf(context: dict, assessment: Assessment, model: str) -> bytes:
     ]))
     story.extend([table, paragraph("AI-assisted assessment", "Heading2"),
                   paragraph(assessment.assessment),
-                  paragraph("Recommended actions for authority review", "Heading2")])
+                  paragraph("Priority next steps for ICB review", "Heading2")])
     for index, action in enumerate(assessment.recommended_actions, 1):
         story.append(paragraph(f"{index}. {action}"))
     story.extend([
@@ -157,13 +169,32 @@ class ReportService:
         s = self.settings
         schema = Assessment.model_json_schema()
         prompt = (
-            "Write a professional public-health exercise incident report using only the supplied "
-            "observed context. All data is synthetic. Clearly distinguish measurements from "
+            "Write a concise, professional situation report addressed to the NHS ICB named in "
+            "zone.name, for NHS preparedness and early-warning review. The recipient address is "
+            "a configured test inbox, not verified authority routing. Do not claim the ICB, "
+            "UKHSA or local authority has been contacted. Use only the supplied observed context. "
+            "All data is synthetic. Clearly distinguish measurements from "
             "interpretations. Do not invent facts, identify a pathogen, claim actions were executed, "
             "or recommend stock transfers or rideshare restrictions. Suggest verification and "
-            "authority review rather than issuing medical or containment orders. Do not add numeric "
-            "claims to the narrative; exact measurements are rendered separately in a verified table. "
-            "State uncertainty and the synthetic nature of the exercise in the limitations."
+            "authority review rather than issuing medical or containment orders. "
+            f"Keep all narrative fields combined within {config.REPORT_MAX_WORDS} words, including "
+            "actions and limitations. Use a short executive summary of the concern and decision "
+            "needed; a short assessment explaining the observed signals, forecast uncertainty and "
+            "why a risk score is not an outbreak diagnosis. "
+            f"Provide {config.REPORT_ACTIONS_RANGE[0]} to {config.REPORT_ACTIONS_RANGE[1]} "
+            "prioritised recommended_actions. Each must name a responsible team, a proposed "
+            "timeframe (immediate, same day or next daily review), and a concrete task or output. "
+            "Cover: surveillance/data teams verifying wastewater quality and corroborating signals; "
+            "the ICB duty/emergency-preparedness team liaising with the local UKHSA Health Protection "
+            "Team and local authority Director of Public Health to assess escalation under existing "
+            "plans; and NHS provider operational leads reviewing service capacity, staffing and "
+            "readiness, with a named owner for the next signal review. Where evidence is not "
+            "available, request verification rather than asserting it exists. These are proposed "
+            "human-led steps, not actions already taken. Do not invent contacts, local protocols, "
+            "case counts, resources or clinical interventions. Do not add numeric claims to the "
+            "narrative; exact measurements are rendered separately in a verified table. "
+            "State uncertainty, the synthetic nature of the exercise, and the need for human "
+            "public-health review in the limitations."
         )
         try:
             response = httpx.post(
@@ -203,13 +234,19 @@ class ReportService:
     def send(self, context: dict, pdf: bytes) -> None:
         s = self.settings
         message = EmailMessage()
-        message["Subject"] = f"[SIMULATED EXERCISE] BioSecure incident - {context['zone']['name']}"
+        message["Subject"] = f"[SIMULATED EXERCISE] BioSecure ICB early warning - {context['zone']['name']}"
         message["From"], message["To"] = s.smtp_from, context["recipient"]
         message["Message-ID"] = make_msgid()
         message.set_content(
             f"{config.SYNTHETIC_NOTICE}\n\n"
-            f"An operator approved this incident notification for {context['zone']['name']}.\n"
-            "The attached PDF contains synthetic evidence and an AI-assisted assessment for review.\n"
+            f"Intended authority: NHS {context['zone']['name']} ICB.\n"
+            f"Test delivery address: {context['recipient']}.\n"
+            "An operator approved this early-warning notification and situation report for ICB "
+            "preparedness review, with proposed next steps for verification, public-health "
+            "liaison and NHS readiness.\n"
+            "The attached PDF contains synthetic evidence and an AI-assisted assessment for review. "
+            "The ICB should liaise with the local UKHSA Health Protection Team and local authority "
+            "public-health team if escalation is warranted. These teams are not emailed by this app.\n"
             "This is a test notification, not a real emergency. No operational actions were executed.")
         message.add_attachment(pdf, maintype="application", subtype="pdf",
                                filename=f"biosecure-incident-{context['episode_id']}.pdf")

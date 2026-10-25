@@ -107,6 +107,10 @@ describe('Incidents', () => {
     render(<Incidents {...props} events={[detected, opened]} onApprove={onApprove} onOverride={onOverride} />)
     expect(screen.getByTestId('incident-summary')).toHaveTextContent('critical forecast')
     expect(screen.getByTestId('alert-notification')).toHaveTextContent('daeyad1@gmail.com')
+    expect(screen.getByTestId('alert-notification')).toHaveTextContent('Intended authority: NHS Greater Manchester ICB')
+    expect(screen.getByTestId('alert-notification')).toHaveTextContent('Test delivery address:')
+    expect(screen.getByTestId('alert-notification')).toHaveTextContent('does not contact the ICB')
+    expect(screen.getByTestId('alert-notification')).toHaveTextContent('UKHSA and local public health')
     expect(screen.getByTestId('alert-notification')).not.toHaveTextContent(/synthetic|simulated/i)
     expect(screen.queryByText(/auto-approve|pooled rides|briefing|stock moved/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('approve'))
@@ -118,6 +122,7 @@ describe('Incidents', () => {
     render(<Incidents {...props} events={[detected, opened, progress(status)]} />)
     expect(screen.queryByTestId('approve')).not.toBeInTheDocument()
     expect(screen.queryByTestId('report-retry')).not.toBeInTheDocument()
+    expect(screen.getByTestId('alert-notification')).toHaveTextContent('does not contact the ICB')
   })
   it('offers retry for definite failure and download when PDF exists', () => {
     const onRetry = vi.fn()
@@ -142,6 +147,26 @@ describe('Incidents', () => {
 })
 
 describe('Other panels', () => {
+  it.each([
+    ['2026-10-05', '3 days before'],
+    ['2026-10-02', 'the same day'],
+    [undefined, 'from the 48-hour forecast'],
+  ])('shows the alert lead caption without a lightning emoji (crossing %s)', (cross, caption) => {
+    const history = {
+      zip_code: 'a', zone_name: 'a',
+      days: [
+        { day: 31, date: '2026-10-02', status: 'CRITICAL' as const,
+          score: cross === '2026-10-02' ? 80 : 55, projected_score: 85 },
+        ...(cross && cross !== '2026-10-02'
+          ? [{ day: 34, date: cross, status: 'CRITICAL' as const, score: 80, projected_score: 90 }] : []),
+      ],
+    }
+    render(<ZonePanel zones={[zone('a', { status: 'CRITICAL' })]} selected="a"
+                      history={history} onSelect={noop} />)
+    expect(screen.getByTestId('lead-note')).toHaveTextContent('Outbreak alert raised')
+    expect(screen.getByTestId('lead-note')).toHaveTextContent(caption)
+    expect(screen.getByTestId('lead-note')).not.toHaveTextContent('⚡')
+  })
   it('filters routine status changes in the raw log until requested', () => {
     render(<RawLog events={[event('STATUS_CHANGE', { to: 'ELEVATED' }, { message: 'Devon elevated' }),
                             event('REPORT_STATUS', {}, { message: 'Report sent' })]} />)

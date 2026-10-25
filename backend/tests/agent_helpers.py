@@ -69,7 +69,8 @@ ASSESSMENT = Assessment(
     executive_summary="A synthetic wastewater signal warrants authority review.",
     assessment="The forecast indicates rising risk, with significant uncertainty.",
     recommended_actions=["Verify the signal with the responsible surveillance team.",
-                         "Review local preparedness using established procedures."],
+                         "Review local preparedness using established procedures.",
+                         "ICB duty team: arrange the next daily review with public-health partners."],
     limitations="All data is synthetic. No pathogen or diagnosis is established.")
 
 

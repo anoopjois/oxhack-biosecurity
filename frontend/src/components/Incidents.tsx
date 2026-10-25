@@ -38,6 +38,7 @@ export function Incidents({ events, zones, onSelect, onApprove, onOverride, onRe
           const status = incident.report?.status ?? incident.opened?.status ?? 'awaiting_approval'
           const episodeId = incident.episodeId
           const recipient = incident.opened?.recipient
+          const authority = `NHS ${names.get(incident.zip) ?? incident.zip} ICB`
           const phase = phaseOf(incident)
           return (
             <article key={incident.key} className={`incident phase-${phase}`} data-testid="incident"
@@ -52,10 +53,14 @@ export function Incidents({ events, zones, onSelect, onApprove, onOverride, onRe
               <p data-testid="incident-summary">{incident.opened?.summary ?? incident.detected.message}</p>
               <div className="approval-box" data-testid="alert-notification">
                 <strong role="status">{LABELS[status]}</strong>
-                {recipient && <p>Recipient: <b>{recipient}</b></p>}
+                <p>Intended authority: <b>{authority}</b></p>
+                {recipient && <p>Test delivery address: <b>{recipient}</b></p>}
+                <p>Test delivery only: this does not contact the ICB or other public-health teams.</p>
                 {status === 'awaiting_approval' && episodeId !== undefined && <>
-                  <p>Approve to generate a professional incident PDF using Gemini and email it to the recipient.
-                    The report includes AI-generated analysis. Nothing is sent without your approval.</p>
+                  <p>Approve an early warning and situation report for the ICB to review NHS preparedness.
+                    Gemini generates a brief PDF with evidence, proposed next steps and liaison
+                    recommendations for UKHSA and local public health, then emails it to the test address.
+                    Nothing is sent without your approval.</p>
                   <div className="popover-actions">
                     <button className="btn btn-primary" data-testid="approve" disabled={busy || !onApprove}
                             onClick={() => onApprove?.(episodeId)}>Approve &amp; send report</button>
