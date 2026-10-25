@@ -95,6 +95,7 @@ test('resizing preserves the map, chart, long names and all incident approval co
       await page.setViewportSize({ width, height })
       await page.evaluate(() => window.scrollTo(0, 0))
       await fitsHorizontally(page)
+      await expect(page.locator('.arc, .arc-arrow, .arc-label')).toHaveCount(0)
       await noSiblingOverlap(page.locator('.header'))
       await noSiblingOverlap(page.locator('.controls'))
       await noSiblingOverlap(page.locator('.stats'))

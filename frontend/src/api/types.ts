@@ -87,37 +87,6 @@ export interface Stock {
   vaccine_doses: number
 }
 
-export type Item = keyof Stock
-export const ITEMS: Item[] = ['ppe_units', 'antiviral_doses', 'vaccine_doses']
-
-export interface TransferPayload extends Stock {
-  donor: string
-  donor_name: string
-  facility_id: string
-  distance_km: number
-  donor_after: Stock
-  /** Days of normal use the donor's stock covers before and after giving (its scarcest item). */
-  reserve_days_before: number
-  reserve_days_after: number
-}
-
-/** AGENT_ALLOCATION: the proposed stock move (it moves only once approved). */
-export interface AllocationPayload {
-  episode_id: number
-  target: string
-  approval: { required: boolean; timeout_s: number }
-  /** No donor can drop below this many days of reserve (its safety level). */
-  reserve_floor_days: number
-  transfers: TransferPayload[]
-  surge_target: Stock
-  deficit: Stock
-  transferred: Stock
-  uncovered: Stock
-  coverage_pct: Stock
-  target_before: Stock
-  target_after: Stock
-}
-
 export interface StatusChangePayload {
   from: Status
   to: Status

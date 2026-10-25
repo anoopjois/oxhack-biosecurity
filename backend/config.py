@@ -50,15 +50,6 @@ VACCINE_PER_CAPITA = 0.01
 STOCK_JITTER_RANGE = (0.8, 1.2)
 INVENTORY_RNG_STREAM = 1  # inventory draws use rng((seed, stream)), independent of telemetry
 
-# Agent: allocation (see backend/agent/allocation.py for the formulas)
-SURGE_MULTIPLIER = 2.0    # an outbreak zone should hold 2x its normal per-capita stock
-SAFETY_FRACTION = 0.6     # a donor never drops below 60% of its normal per-capita stock
-MAX_DONORS = 3            # donors per alert, so the feed stays readable
-EARTH_RADIUS_KM = 6371.0  # for the haversine distance
-
-# Agent: donor reserve, in days of normal use (see reserve_days in backend/agent/allocation.py)
-NORMAL_STOCK_DAYS = 7.0   # a hub's normal per-capita stock l_k*P lasts this many days at normal use
-
 # Events API
 EVENTS_DEFAULT_LIMIT = 100
 EVENTS_MAX_LIMIT = 1000

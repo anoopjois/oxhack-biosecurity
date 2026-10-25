@@ -2,8 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { leadMarkers, pollInterval, shortcutFor, shouldUseOffline } from '../src/lib/behaviour'
 import { buildFeed, isDefaultVisible } from '../src/lib/events'
-import { compact, doublingDays, longDate, roundToTotal, shortDate, shortName } from '../src/lib/format'
-import { arcPoints, arrowRotation } from '../src/lib/geo'
+import { compact, doublingDays, longDate, roundToTotal, shortDate } from '../src/lib/format'
 import { countByStatus, PIN_DOT_RADIUS, PIN_RING_RADIUS, PIN_SELECTED_RADIUS, RISK_SCORE_HELP, STATUS_META } from '../src/lib/status'
 import { event } from './fixtures'
 
@@ -28,32 +27,6 @@ describe('status and pins', () => {
     expect(RISK_SCORE_HELP).toMatch(/Wastewater viral load \(50%\).*A&E waiting-time pressure \(35%\).*Mobility & crowding \(15%\)/)
     expect(RISK_SCORE_HELP).toContain('not an infection probability')
     expect(RISK_SCORE_HELP).toContain('at least 80')
-  })
-})
-
-describe('arcs', () => {
-  const from: [number, number] = [53.3, -2.7]
-  const to: [number, number] = [53.5, -2.25]
-
-  it('has exact endpoints and n + 1 points', () => {
-    const pts = arcPoints(from, to, 32)
-    expect(pts).toHaveLength(33)
-    expect(pts[0]).toEqual(from)
-    expect(pts[32]).toEqual(to)
-  })
-
-  it('bulges to one side of the straight line', () => {
-    const pts = arcPoints(from, to, 32)
-    const k = Math.cos((53.4 * Math.PI) / 180)
-    const side = (p: [number, number]) =>
-      Math.sign((to[1] - from[1]) * k * (p[0] - from[0]) - (to[0] - from[0]) * (p[1] - from[1]) * k)
-    const sides = new Set(pts.slice(1, -1).map(side))
-    expect(sides.size).toBe(1)
-  })
-
-  it('points the arrowhead along the last segment', () => {
-    expect(arrowRotation([[52, -1], [52, 0]])).toBeCloseTo(0)     // due east
-    expect(arrowRotation([[52, 0], [53, 0]])).toBeCloseTo(-90)    // due north = up on screen
   })
 })
 
@@ -140,18 +113,5 @@ describe('formatting', () => {
     expect(compact(4300)).toBe('4.3k')
     expect(compact(950)).toBe('950')
     expect(doublingDays(0.4)).toBeCloseTo(1.733, 3)
-    expect(shortName('Bath and North East Somerset, Swindon and Wiltshire')).toBe('Bath')
-    expect(shortName('Greater Manchester')).toBe('Greater Manchester')
-  })
-})
-
-describe('arc labels', () => {
-  it('sit on the side of the donor facing away from the target', async () => {
-    const { labelOffset } = await import('../src/lib/geo')
-    const target: [number, number] = [53.5, -2.25]
-    expect(labelOffset([53.5, -1.6], target)).toBe('translate(18px, -50%)')               // donor to the east
-    expect(labelOffset([53.5, -2.9], target)).toBe('translate(calc(-100% - 18px), -50%)') // west
-    expect(labelOffset([54.0, -2.25], target)).toBe('translate(-50%, calc(-100% - 18px))') // north: above
-    expect(labelOffset([53.0, -2.25], target)).toBe('translate(-50%, 18px)')              // south: below
   })
 })

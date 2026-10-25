@@ -1,27 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
+import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import type { FeatureCollection } from 'geojson'
 import 'leaflet/dist/leaflet.css'
-import type { AllocationPayload, Zone } from '../api/types'
+import type { Zone } from '../api/types'
 import { shouldUseOffline, TILE_TIMEOUT_MS } from '../lib/behaviour'
-import { compact, shortName } from '../lib/format'
-import { arcPoints, arrowRotation, CITIES, ENGLAND_BOUNDS, labelOffset, MAX_BOUNDS, visibleCities, ZONE_LABEL_CHAR_PX, ZONE_LABEL_GAP_PX, zoneLabelSide, type LatLng } from '../lib/geo'
+import { CITIES, ENGLAND_BOUNDS, MAX_BOUNDS, visibleCities, ZONE_LABEL_CHAR_PX, ZONE_LABEL_GAP_PX, zoneLabelSide, type LatLng } from '../lib/geo'
 import { countByStatus, PIN_DOT_RADIUS, PIN_RING_RADIUS, PIN_SELECTED_RADIUS, STATUS_META } from '../lib/status'
 
 /** 'vector': built-in outline (default, seam-free, offline). 'tiles': greyscale OSM at integer zoom. */
 export type BaseMode = 'vector' | 'tiles'
 
-export interface ArcSet {
-  key: number
-  allocations: AllocationPayload[]
-}
-
 interface Props {
   zones: Zone[]
   selected: string | null
   picking: boolean
-  arcs: ArcSet | null
   outline: FeatureCollection | null
   mode: BaseMode
   fellBack: boolean
@@ -31,7 +24,6 @@ interface Props {
 
 // Leave room for the legend along the bottom edge.
 const FIT: L.FitBoundsOptions = { paddingTopLeft: [20, 20], paddingBottomRight: [20, 56] }
-const FOCUS: L.FitBoundsOptions = { paddingTopLeft: [150, 90], paddingBottomRight: [150, 110], maxZoom: 8 }
 // Closest zoom the + button allows: a single area fills the map, and tiles are still sharp.
 const MAX_ZOOM = 10
 
@@ -41,9 +33,8 @@ export function MapView(p: Props) {
     <div className={`map-wrap map-${p.mode}${p.picking ? ' map-picking' : ''}`} data-testid="map">
       <MapContainer bounds={ENGLAND_BOUNDS} boundsOptions={FIT} zoomSnap={0.1} zoomControl={false}
                     attributionControl={false} className="map" maxBoundsViscosity={1} maxZoom={MAX_ZOOM}>
-        <Fit mode={p.mode} focused={p.arcs !== null} />
+        <Fit mode={p.mode} />
         <ZoomControls />
-        <Camera arcs={p.arcs} zones={p.zones} />
         <Pane name="base" style={{ zIndex: 200 }} />
         <Pane name="cities" style={{ zIndex: 390 }} />
         <Pane name="labels" style={{ zIndex: 650 }} />
@@ -55,7 +46,6 @@ export function MapView(p: Props) {
           <Pin key={z.zip_code} zone={z} selected={p.selected === z.zip_code} onClick={p.onZoneClick} />
         ))}
         <ZoneLabels zones={p.zones} selected={p.selected} />
-        {p.arcs && <Arcs arcs={p.arcs} zones={p.zones} />}
       </MapContainer>
 
       <div className="map-legend" data-testid="legend">
@@ -123,16 +113,14 @@ function ZoomControls() {
  * Fit England tightly and stop panning/zooming far from it. In tiles mode the zoom snaps to
  * whole levels: at fractional zoom browsers scale each tile separately and leave hairline seams.
  */
-function Fit({ mode, focused }: { mode: BaseMode; focused: boolean }) {
+function Fit({ mode }: { mode: BaseMode }) {
   const map = useMap()
-  const focusedRef = useRef(focused)
-  useEffect(() => { focusedRef.current = focused }, [focused])
   useEffect(() => {
     const fit = () => {
       L.Util.setOptions(map, { zoomSnap: mode === 'tiles' ? 1 : 0.1 })
       map.setMinZoom(0)
       map.invalidateSize()
-      if (!focusedRef.current) map.fitBounds(ENGLAND_BOUNDS, { ...FIT, animate: false })
+      map.fitBounds(ENGLAND_BOUNDS, { ...FIT, animate: false })
       const fitZoom = map.getBoundsZoom(ENGLAND_BOUNDS, false, L.point(40, 76))
       map.setMinZoom(mode === 'tiles' ? Math.floor(fitZoom) : fitZoom - 0.4)
       map.setMaxBounds(MAX_BOUNDS)
@@ -142,30 +130,6 @@ function Fit({ mode, focused }: { mode: BaseMode; focused: boolean }) {
     observer.observe(map.getContainer())
     return () => observer.disconnect()
   }, [map, mode])
-  return null
-}
-
-/** When stock moves, fly to the target and its donors; fly back to England when the arcs clear. */
-function Camera({ arcs, zones }: { arcs: ArcSet | null; zones: Zone[] }) {
-  const map = useMap()
-  const mounted = useRef(false)
-  const key = arcs?.key ?? null
-  useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true
-      if (!arcs) return // nothing to do on first render: <Fit> has already framed England
-    }
-    if (!arcs) {
-      map.flyToBounds(ENGLAND_BOUNDS, { ...FIT, duration: 1.0 })
-      return
-    }
-    const byZip = new Map(zones.map((z) => [z.zip_code, z]))
-    const points = arcs.allocations.flatMap((a) => [a.target, ...a.transfers.map((t) => t.donor)])
-      .map((zip) => byZip.get(zip)).filter((z): z is Zone => z !== undefined)
-      .map((z) => [z.latitude, z.longitude] as LatLng)
-    if (points.length > 1) map.flyToBounds(L.latLngBounds(points), { ...FOCUS, duration: 1.2 })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, map])
   return null
 }
 
@@ -323,60 +287,6 @@ function ZoneLabels({ zones, selected }: { zones: Zone[]; selected: string | nul
   return (
     <>
       {items.map((it) => <Marker key={it.key} position={it.at} icon={it.icon} interactive={false} pane="labels" />)}
-    </>
-  )
-}
-
-const ARROW_INDEX = 27 // of 32 points: the arrowhead sits just short of the target pin
-
-function Arcs({ arcs, zones }: { arcs: ArcSet; zones: Zone[] }) {
-  const [labelsVisible, setLabelsVisible] = useState(false)
-  useEffect(() => {
-    setLabelsVisible(false)
-    const t = window.setTimeout(() => setLabelsVisible(true), 900)
-    return () => window.clearTimeout(t)
-  }, [arcs.key])
-  // Built once per allocation: rebuilding Leaflet icons on every poll would restart their fade-in.
-  const drawn = useMemo(() => {
-    const byZip = new Map(zones.map((z) => [z.zip_code, z]))
-    return arcs.allocations.flatMap((alloc) => {
-      const target = byZip.get(alloc.target)
-      if (!target) return []
-      return alloc.transfers.map((t) => {
-        const donor = byZip.get(t.donor)
-        if (!donor) return null
-        const donorAt: LatLng = [donor.latitude, donor.longitude]
-        const points = arcPoints(donorAt, [target.latitude, target.longitude])
-        const arrow = L.divIcon({
-          className: '', iconSize: [0, 0],
-          html: `<div class="arc-arrow" style="transform: translate(-50%,-50%) rotate(${
-            arrowRotation(points.slice(0, ARROW_INDEX + 1))}deg)">➤</div>`,
-        })
-        // Label at the donor, pushed away from the target, so labels of nearby donors don't stack.
-        const label = L.divIcon({
-          className: '', iconSize: [0, 0],
-          html: `<div class="arc-label" style="transform: ${labelOffset(donorAt, [target.latitude, target.longitude])}">` +
-            `<strong>${escapeHtml(shortName(t.donor_name))} · ${Math.round(t.distance_km)} km</strong>` +
-            `<span>${compact(t.ppe_units)} PPE · ${compact(t.antiviral_doses)} antivirals · ${compact(t.vaccine_doses)} vaccines</span>` +
-            (t.reserve_days_after === undefined ? ''
-              : `<span class="arc-reserve">🛡 keeps ${t.reserve_days_after.toFixed(1)} days of reserve</span>`) +
-            `</div>`,
-        })
-        return { key: `${arcs.key}-${alloc.episode_id}-${t.donor}`, points, arrow, label, donorAt }
-      }).filter((d) => d !== null)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arcs.key])
-  return (
-    <>
-      {drawn.map((d) => (
-        <span key={d.key}>
-          <Polyline positions={d.points} interactive={false}
-                    pathOptions={{ weight: 4, opacity: 0.95, lineCap: 'round', className: 'arc' }} />
-          <Marker position={d.points[ARROW_INDEX]} icon={d.arrow} interactive={false} />
-          {labelsVisible && <Marker position={d.donorAt} icon={d.label} interactive={false} />}
-        </span>
-      ))}
     </>
   )
 }

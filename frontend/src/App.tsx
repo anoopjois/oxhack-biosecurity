@@ -154,7 +154,7 @@ export default function App() {
               onBaseMode={(m) => { setMode(m); setFellBack(false) }} onShowLog={setShowLog} />
       <main className="main">
         <div className="cell-map">
-          <MapView zones={zones} selected={selected} picking={spikeOpen} arcs={null} outline={outline}
+          <MapView zones={zones} selected={selected} picking={spikeOpen} outline={outline}
                    mode={mode} fellBack={fellBack}
                    onFallBack={() => { setMode('vector'); setFellBack(true) }}
                    onZoneClick={onZoneClick} />
