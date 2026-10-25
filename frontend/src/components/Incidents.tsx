@@ -54,12 +54,11 @@ export function Incidents({ events, zones, onSelect, onApprove, onOverride, onRe
               <div className="approval-box" data-testid="alert-notification">
                 <strong role="status">{LABELS[status]}</strong>
                 <p>Intended authority: <b>{authority}</b></p>
-                {recipient && <p>Test delivery address: <b>{recipient}</b></p>}
-                <p>Test delivery only: this does not contact the ICB or other public-health teams.</p>
+                {recipient && <p>Delivery address: <b>{recipient}</b></p>}
                 {status === 'awaiting_approval' && episodeId !== undefined && <>
                   <p>Approve an early warning and situation report for the ICB to review NHS preparedness.
                     Gemini generates a brief PDF with evidence, proposed next steps and liaison
-                    recommendations for UKHSA and local public health, then emails it to the test address.
+                    recommendations for UKHSA and local public health, then emails it only to the delivery address shown.
                     Nothing is sent without your approval.</p>
                   <div className="popover-actions">
                     <button className="btn btn-primary" data-testid="approve" disabled={busy || !onApprove}

@@ -111,8 +111,10 @@ The recipient defaults to **daeyad1@gmail.com**, a test inbox, not an official a
 `ALERT_RECIPIENT` is one configured address for all zones; jurisdiction-based authority
 routing is not implemented. Change it only when an authorised recipient is agreed.
 Approval cards, PDFs and emails name the affected **NHS ICB as the intended authority**
-for an early warning and situation report. They also explicitly label the actual
-test delivery address: approving does **not** contact the ICB, UKHSA or local authority.
+for an early warning and situation report. The dashboard labels the configured inbox
+as **Delivery address** and sends only there. PDFs and emails retain exercise labels
+and identify the test delivery address: approving does **not** separately contact the
+ICB, UKHSA or local authority.
 In real use, the ICB coordinates NHS preparedness and clinical-service planning,
 in liaison with the local UKHSA Health Protection Team and local authority
 Director of Public Health for outbreak assessment and response:

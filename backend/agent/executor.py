@@ -32,7 +32,7 @@ class Agent:
                        f"Outbreak risk now: {metric(observed['score'])}/100; forecast in 48 hours: "
                        f"{metric(observed['projected_score'])}/100. "
                        f"Review the observed signals and approve an early-warning situation report "
-                       f"for NHS {zone.zone_name} ICB preparedness review via the configured test inbox.")
+                       f"for NHS {zone.zone_name} ICB preparedness review via the configured delivery address.")
             recipient = self.service.settings.recipient
             cursor = sim.conn.execute(
                 """INSERT INTO agent_episodes
