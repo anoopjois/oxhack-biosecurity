@@ -16,7 +16,8 @@ See the [setup instructions](../README.md) and [talk track](DEMO_SCRIPT.md).
 - A real end-to-end send is a separate operator action: only click **Approve & send
   report** if you intend to email the configured recipient.
 - Configure before starting: restarting the backend resets demo records.
-- Verify the map has 36 ICBs using the April 2026 roster. Restart the backend to
+- Verify the England overview says **Monitoring 36 NHS ICBs across England** and
+  the map has 36 pins using the April 2026 roster. Restart the backend to
   reload changed zone metadata; resetting the clock alone does not reload the CSV.
 - Disclose the known failing clean-data requirement: 1 false CRITICAL zone-day in
   165,600 zone-days across 200 seeds. Do not claim zero false alerts.

@@ -119,7 +119,8 @@ function Overview({ zones, onSelect }: { zones: Zone[]; onSelect: (zip: string) 
       <h2 className="overview-headline">Viral outbreak risk across England</h2>
       <p className="overview-status">{headline}</p>
       <p className="explain">
-        Each pin is an NHS area. Its colour shows the viral outbreak alert level, not confirmed infections.{' '}
+        {zones.length > 0 && <>Monitoring {zones.length} NHS ICB{zones.length === 1 ? '' : 's'} across England.{' '}</>}
+        Each pin represents an integrated care board. Its colour shows the viral outbreak alert level, not confirmed infections.{' '}
         <Info text={RISK_SCORE_HELP} label="About viral outbreak risk" />
       </p>
       <div className="counts">

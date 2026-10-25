@@ -147,10 +147,18 @@ describe('Other panels', () => {
     fireEvent.click(screen.getByTestId('show-all'))
     expect(screen.getByText('Devon elevated')).toBeInTheDocument()
   })
+  it.each([1, 36])('shows coverage from %i loaded ICBs', (count) => {
+    const zones = Array.from({ length: count }, (_, i) => zone(`area-${i}`))
+    render(<ZonePanel zones={zones} selected={null} history={null} onSelect={noop} />)
+    expect(screen.getByTestId('overview')).toHaveTextContent(
+      `Monitoring ${count} NHS ICB${count === 1 ? '' : 's'} across England`,
+    )
+  })
   it('shows the England overview and risk explanation', () => {
     const { rerender } = render(<ZonePanel zones={[zone('a', { status: 'CRITICAL' }), zone('b')]}
                                          selected={null} history={null} onSelect={noop} />)
     expect(screen.getByTestId('overview')).toHaveTextContent('1 area at critical outbreak risk')
+    expect(screen.getByTestId('overview')).toHaveTextContent('Monitoring 2 NHS ICBs across England')
     expect(screen.getByTestId('risk-explanation')).toHaveTextContent('Wastewater viral load50%')
     expect(screen.getByTestId('risk-explanation')).toHaveTextContent('A&E waiting-time pressure35%')
     expect(screen.getByTestId('risk-explanation')).toHaveTextContent('Mobility & crowding15%')

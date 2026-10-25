@@ -33,6 +33,7 @@ test('map displays the 36 current ICBs and selects a merged area', async ({ page
   await page.goto('/')
   await page.getByTestId('coach-dismiss').click()
   await expect(page.locator('path.pin-ring')).toHaveCount(36)
+  await expect(page.getByTestId('overview')).toContainText('Monitoring 36 NHS ICBs across England')
   for (const zone of ['central-east', 'essex', 'norfolk-and-suffolk',
     'west-and-north-london', 'thames-valley', 'surrey-and-sussex']) {
     await expect(page.locator(`path.pin-ring[data-zone="${zone}"]`)).toHaveCount(1)
