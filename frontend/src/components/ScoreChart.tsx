@@ -54,7 +54,7 @@ export function ScoreChart({ days, spike, alert, hit }: Props) {
     <div className="score-chart" ref={box} data-testid="score-chart">
       {n < 2 ? <p className="muted chart-empty">Not enough data yet.</p> : (
         <svg width={w} height={h} role="img" onMouseMove={onMove} onMouseLeave={() => setHover(null)}
-             aria-label="Risk now and the 48-hour forecast over time">
+             aria-label="Viral outbreak risk index and its 48-hour forecast over time">
           {[0, 40].map((v) => (
             <g key={v}>
               <line x1={PAD.left} x2={w - PAD.right} y1={Y(v)} y2={Y(v)} style={{ stroke: 'var(--grid)' }} />
@@ -68,7 +68,7 @@ export function ScoreChart({ days, spike, alert, hit }: Props) {
           <line x1={PAD.left} x2={w - PAD.right} y1={Y(CRITICAL_LINE)} y2={Y(CRITICAL_LINE)} style={{ stroke: 'var(--critical)' }} strokeDasharray="5 4" />
           <text x={PAD.left - 6} y={Y(CRITICAL_LINE) + 4} className="axis axis-critical" textAnchor="end">80</text>
           <text x={PAD.left + 4} y={Y(CRITICAL_LINE) - 5} className="axis axis-critical">Critical</text>
-          {iSpike >= 0 && <Marker x={X(iSpike)} top={plotTop} bottom={h - PAD.bottom} label="Spike" kind="spike" pillX={pillX(iSpike)} />}
+          {iSpike >= 0 && <Marker x={X(iSpike)} top={plotTop} bottom={h - PAD.bottom} label="Surge" kind="spike" pillX={pillX(iSpike)} />}
           {iAlert >= 0 && <Marker x={X(iAlert)} top={plotTop} bottom={h - PAD.bottom} label="Alert" kind="alert"
                                  pillX={pillX(iAlert)} labelTop={stackedMarkers ? 22 : 2} />}
           <path d={path('projected_score')} fill="none" style={{ stroke: SERIES.forecast }} strokeWidth={2.5} strokeDasharray="6 4" />
@@ -87,8 +87,8 @@ export function ScoreChart({ days, spike, alert, hit }: Props) {
               <foreignObject x={Math.max(0, Math.min(X(hover) + 8, w - 168))} y={Math.min(plotTop, h - 58)} width={160} height={58}>
                 <div className="chart-tip">
                   <strong>{shortDate(days[hover].date)}</strong>
-                  <span>Risk now {Math.round(days[hover].score ?? 0)}</span>
-                  <span>Forecast {Math.round(days[hover].projected_score ?? 0)}</span>
+                  <span>Outbreak risk {Math.round(days[hover].score ?? 0)} / 100</span>
+                  <span>48h forecast {Math.round(days[hover].projected_score ?? 0)} / 100</span>
                 </div>
               </foreignObject>
             </g>

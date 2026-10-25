@@ -23,7 +23,7 @@ export const SHORTCUTS: { keys: string; action: ShortcutAction; label: string }[
   { keys: 'Space', action: 'toggle', label: 'Play / pause' },
   { keys: '→', action: 'step', label: 'Step one day' },
   { keys: 'R', action: 'reset', label: 'Reset (asks to confirm)' },
-  { keys: 'S', action: 'spike', label: 'Simulate pathogen spike' },
+  { keys: 'S', action: 'spike', label: 'Add viral surge scenario' },
   { keys: '?', action: 'help', label: 'Show shortcuts' },
 ]
 

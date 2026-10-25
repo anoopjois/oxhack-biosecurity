@@ -23,10 +23,11 @@ describe('status and pins', () => {
     expect(PIN_SELECTED_RADIUS).toBeGreaterThan(PIN_RING_RADIUS)
   })
 
-  it('explains the risk score in two plain sentences', () => {
-    expect(RISK_SCORE_HELP.split(/(?<=\.) /)).toHaveLength(2)
+  it('explains the viral outbreak index, its factors and alert rules without implying a diagnosis', () => {
     expect(RISK_SCORE_HELP).toMatch(/0–100/)
-    expect(RISK_SCORE_HELP).toMatch(/sewage water.*A&E.*crowded/)
+    expect(RISK_SCORE_HELP).toMatch(/Wastewater viral load \(50%\).*A&E waiting-time pressure \(35%\).*Mobility & crowding \(15%\)/)
+    expect(RISK_SCORE_HELP).toContain('not an infection probability')
+    expect(RISK_SCORE_HELP).toContain('at least 80')
   })
 })
 

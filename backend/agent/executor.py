@@ -28,10 +28,10 @@ class Agent:
                                 (transition.event_id,)).fetchone():
                 continue
             zone, observed = self.zones[zip_code], results[zip_code]
-            summary = (f"{zone.zone_name} crossed the critical early-warning threshold. "
-                       f"Risk now: {metric(observed['score'])}; forecast in 48 hours: "
-                       f"{metric(observed['projected_score'])}. "
-                       "Review the synthetic evidence and approve an incident report notification.")
+            summary = (f"{zone.zone_name} crossed the critical early-warning threshold for viral outbreak risk. "
+                       f"Outbreak risk now: {metric(observed['score'])}/100; forecast in 48 hours: "
+                       f"{metric(observed['projected_score'])}/100. "
+                       "Review the observed signals and approve an outbreak report notification.")
             recipient = self.service.settings.recipient
             cursor = sim.conn.execute(
                 """INSERT INTO agent_episodes

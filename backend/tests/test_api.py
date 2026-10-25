@@ -33,6 +33,11 @@ def test_starts_at_end_of_history(client):
     assert clock["day"] == START_DAY and clock["sim_date"] == "2026-09-28"
     assert not clock["playing"] and not clock["at_end"]
     assert len(status["zones"]) == N_ZONES
+    assert client.get(f"{API}/health").json()["zones"] == N_ZONES
+    expected_names = dict(zip(load_zones()["zip_code"], load_zones()["zone_name"]))
+    assert {z["zip_code"]: z["zone_name"] for z in status["zones"]} == expected_names
+    facilities = client.get(f"{API}/inventory").json()["facilities"]
+    assert {f["zip_code"]: f["zone_name"] for f in facilities} == expected_names
     assert all(z["status"] != "INSUFFICIENT_DATA" for z in status["zones"])
 
     conn = client.app.state.sim.read_connection()
@@ -89,7 +94,22 @@ def test_trigger_validation(client):
 
     while not client.post(f"{API}/clock/step").json()["clock"]["at_end"]:
         pass
-    assert client.post(f"{API}/trigger-outbreak", json={"zone": "sussex", "r": 0.4}).status_code == 409
+    assert client.post(f"{API}/trigger-outbreak", json={"zone": "surrey-and-sussex", "r": 0.4}).status_code == 409
+
+
+def test_merged_icbs_support_history_and_outbreaks(client):
+    for zone in ("central-east", "essex", "norfolk-and-suffolk", "west-and-north-london",
+                 "thames-valley", "surrey-and-sussex"):
+        history = client.get(f"{API}/zones/{zone}/history")
+        assert history.status_code == 200
+        assert history.json()["zip_code"] == zone
+        assert history.json()["days"]
+        response = client.post(f"{API}/trigger-outbreak", json={"zone": zone, "r": 0.4})
+        assert response.status_code == 201
+        assert response.json()["outbreak"]["zone"] == zone
+    for retired in ("north-central-london", "frimley", "sussex"):
+        assert client.get(f"{API}/zones/{retired}/history").status_code == 404
+        assert client.post(f"{API}/trigger-outbreak", json={"zone": retired, "r": 0.4}).status_code == 404
 
 
 def test_play_pause_and_auto_pause(client, monkeypatch):

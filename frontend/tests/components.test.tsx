@@ -20,17 +20,23 @@ const headerProps = {
 }
 
 describe('Header', () => {
-  it('shows date, day, simulated badge and one primary demo action', () => {
+  it('shows assessment date and product purpose without badges or a day counter', () => {
     render(<Header {...headerProps} clock={clock()} />)
     expect(screen.getByText('Fri 2 Oct 2026')).toBeInTheDocument()
-    expect(screen.getByTestId('clock-day')).toHaveTextContent('Day 31 of 41')
-    expect(screen.getByTestId('simulated-badge')).toHaveTextContent('SIMULATED DATA')
+    expect(screen.getByTestId('clock-date')).toHaveAttribute('datetime', '2026-10-02')
+    expect(screen.getByText('Viral outbreak early warning')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'BioSecure' })).toHaveAttribute('src', expect.stringContaining('biosecure-logo.jpeg'))
+    expect(screen.queryByText('BioSecure', { exact: true })).not.toBeInTheDocument()
+    expect(document.querySelector('.brand-dot')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('poc-badge')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('clock-day')).not.toBeInTheDocument()
+    expect(screen.queryByText(/proof of concept|simulated data|day \d+ of/i)).not.toBeInTheDocument()
     expect(document.querySelectorAll('.btn-primary')).toHaveLength(1)
   })
   it('does not hold the clock for a notification approval', () => {
     render(<Header {...headerProps} clock={clock({ awaiting_approval: true })} />)
     expect(screen.getByTestId('step')).toBeEnabled()
-    expect(screen.getByTestId('clock-held')).toHaveTextContent('alert awaiting approval')
+    expect(screen.getByTestId('clock-held')).toHaveTextContent('Alert awaiting approval')
   })
   it('explains disabled controls at the end and allows reset', () => {
     render(<Header {...headerProps} clock={clock({ at_end: true })} />)
@@ -101,6 +107,7 @@ describe('Incidents', () => {
     render(<Incidents {...props} events={[detected, opened]} onApprove={onApprove} onOverride={onOverride} />)
     expect(screen.getByTestId('incident-summary')).toHaveTextContent('critical forecast')
     expect(screen.getByTestId('alert-notification')).toHaveTextContent('daeyad1@gmail.com')
+    expect(screen.getByTestId('alert-notification')).not.toHaveTextContent(/synthetic|simulated/i)
     expect(screen.queryByText(/auto-approve|pooled rides|briefing|stock moved/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('approve'))
     fireEvent.click(screen.getByTestId('override'))
@@ -143,25 +150,60 @@ describe('Other panels', () => {
     fireEvent.click(screen.getByTestId('show-all'))
     expect(screen.getByText('Devon elevated')).toBeInTheDocument()
   })
+  it.each([1, 36])('shows coverage from %i loaded ICBs', (count) => {
+    const zones = Array.from({ length: count }, (_, i) => zone(`area-${i}`))
+    render(<ZonePanel zones={zones} selected={null} history={null} onSelect={noop} />)
+    expect(screen.getByTestId('overview')).toHaveTextContent(
+      `Monitoring ${count} NHS ICB${count === 1 ? '' : 's'} across England`,
+    )
+  })
   it('shows the England overview and risk explanation', () => {
     const { rerender } = render(<ZonePanel zones={[zone('a', { status: 'CRITICAL' }), zone('b')]}
                                          selected={null} history={null} onSelect={noop} />)
-    expect(screen.getByTestId('overview')).toHaveTextContent('1 area critical')
+    expect(screen.getByTestId('overview')).toHaveTextContent('1 area at critical outbreak risk')
+    expect(screen.getByTestId('overview')).toHaveTextContent('Monitoring 2 NHS ICBs across England')
+    expect(screen.getByTestId('risk-explanation')).toHaveTextContent('Wastewater viral load50%')
+    expect(screen.getByTestId('risk-explanation')).toHaveTextContent('A&E waiting-time pressure35%')
+    expect(screen.getByTestId('risk-explanation')).toHaveTextContent('Mobility & crowding15%')
     rerender(<ZonePanel zones={[zone('a')]} selected="a" history={null} onSelect={noop} />)
     const panel = screen.getByTestId('zone-panel')
     expect(within(panel).getAllByRole('term')).toHaveLength(3)
-    expect(within(panel).getByText('Risk now', { selector: 'dt' })).toBeInTheDocument()
-    expect(within(panel).getByText('Risk in 48h')).toBeInTheDocument()
-    expect(within(panel).getByText('Doubling')).toBeInTheDocument()
-    expect(within(panel).queryByText(/A&E wait|usual/i)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'About Risk now' }))
+    expect(within(panel).getByText('Outbreak risk now', { selector: 'dt' })).toBeInTheDocument()
+    expect(within(panel).getByText('Outbreak risk in 48h')).toBeInTheDocument()
+    expect(within(panel).getByText('Viral doubling time')).toBeInTheDocument()
+    expect(within(panel).getByText('69.0')).toBeInTheDocument()
+    expect(within(panel).queryByText('A&E wait')).not.toBeInTheDocument()
+    expect(within(panel).getByTestId('risk-explanation')).toHaveTextContent('not an infection probability')
+    fireEvent.click(screen.getByRole('button', { name: 'About Outbreak risk now' }))
     expect(screen.getByRole('tooltip')).toHaveTextContent(RISK_SCORE_HELP)
   })
   it('shows today, alert, spike and score crossing markers', () => {
     render(<Timeline clock={clock({ day: 33, sim_date: '2026-10-04' })} spike="2026-09-28" alert="2026-10-02" hit="2026-10-04" />)
     expect(screen.getByTestId('tl-cursor')).toHaveTextContent('Today · 4 Oct')
-    expect(screen.getByTestId('tl-spike')).toHaveTextContent('Spike')
+    expect(screen.getByTestId('tl-spike')).toHaveTextContent('Viral surge')
     expect(screen.getByTestId('tl-alert')).toHaveTextContent('Alert raised')
-    expect(screen.getByTestId('tl-hit')).toHaveTextContent('Would have hit 80')
+    expect(screen.getByTestId('tl-hit')).toHaveTextContent('Risk reached 80')
+  })
+  it('does not present missing estimates as zero risk or stable viral levels', () => {
+    const missing = zone('a', { score: null, projected_score: null, r_hat: null, doubling_days: null, status: 'INSUFFICIENT_DATA' })
+    const { rerender } = render(<ZonePanel zones={[missing]} selected={null} history={null} onSelect={noop} />)
+    expect(screen.getByTestId('overview')).toHaveTextContent('Waiting for enough signal history')
+    expect(screen.getByRole('button', { name: 'a: 48-hour outbreak risk unavailable' })).toBeInTheDocument()
+    rerender(<ZonePanel zones={[missing]} selected="a" history={null} onSelect={noop} />)
+    expect(screen.getByTestId('zone-panel').querySelectorAll('.stats dd')).toHaveLength(3)
+    expect(screen.getAllByText('—')).toHaveLength(3)
+    expect(screen.getByTestId('lead-note')).toHaveTextContent('More signal history is needed')
+    rerender(<ZonePanel zones={[zone('a', { r_hat: -0.1, doubling_days: null })]} selected="a" history={null} onSelect={noop} />)
+    expect(screen.getByText('Not rising')).toBeInTheDocument()
+  })
+  it.each([
+    ['SAFE', 'No critical outbreak alert'],
+    ['ELEVATED', 'A critical alert also requires a high forecast and clear viral growth'],
+    ['CRITICAL', 'Critical outbreak alert'],
+  ] as const)('explains %s using observed status, not scenario ground truth', (status, guidance) => {
+    render(<ZonePanel zones={[zone('a', { status, projected_score: 90 })]} selected="a"
+                      history={null} spikeDate="2026-09-28" onSelect={noop} />)
+    expect(screen.getByTestId('lead-note')).toHaveTextContent(guidance)
+    expect(screen.getByTestId('lead-note')).not.toHaveTextContent('forecast is still below 80')
   })
 })

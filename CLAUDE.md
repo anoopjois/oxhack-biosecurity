@@ -38,14 +38,15 @@ this file wins.** The overrides are listed at the bottom.
 
 ## Zones
 
-- England's 42 ICBs, as listed in `docs/SPEC.md`, are stored in `engine/zones.csv`.
+- England's 36 ICBs effective 1 April 2026 are stored in `engine/zones.csv`.
+  `README.md` records the ONS source and the merger/boundary changes.
 - Columns are `zip_code`, `zone_name`, `region`, `latitude`, `longitude` and
   `population`.
-- `zip_code` holds a **slug ID** such as `north-central-london`.
+- `zip_code` holds a **slug ID** such as `west-and-north-london`.
 - `zone_name` holds the **current official ICB name**, not the outdated names in the
   spec.
 - Coordinates and populations are approximate.
-- **The zone count always comes from the file.** Never hardcode 42.
+- **The zone count always comes from the file.** Never hardcode the runtime count.
 
 ## Engine maths
 
@@ -118,7 +119,7 @@ day it entered CRITICAL. They unfreeze on the day it exits.
      k = days since onset.
    - These are the pitch numbers.
 
-**Measured in Phase 1** (200 seeds, r = 0.4, onset on day 28):
+**Measured in Phase 1, historical 42-ICB roster** (200 seeds, r = 0.4, onset on day 28):
 - Zero CRITICAL in 193,200 clean zone-days. ELEVATED on 3.1% of clean zone-days.
 - Red lead: mean 2.25 days, median 2; on or before the crossing in 100% of seeds.
 - Median k (days since onset):
@@ -132,6 +133,12 @@ day it entered CRITICAL. They unfreeze on the day it exits.
 - No alert faded before onset + 12.
 3. No look-ahead: changing data after the as-of date never changes the output.
 4. The alert does not fade before onset + 12 days.
+
+**Current 36-ICB revalidation:** 1 CRITICAL zone-day in 165,600 clean zone-days, so
+required test 1 fails. The user approved retaining the revised roster and unchanged
+maths with this failure documented; do not hide it or relax the test. The remaining
+96 engine/backend tests pass. Red lead remains median 2 days, mean 2.245 days, and
+on or before the crossing in 100% of seeds. See `docs/MATHS.md` for current results.
 
 ## Generator
 
@@ -386,7 +393,7 @@ Judges will ask whether an AI should move medical supplies on its own. The answe
 - Markers: Spike, Alert raised, Would have hit 80.
 
 **Controls**
-- First-load coach card ("Watch an outbreak unfold").
+- Open directly to the dashboard, without a first-load welcome popup. Run demo stays in the header.
 - End-of-timeline bar ("Timeline ended · Reset · Replay demo"); disabled controls
   explain why in a tooltip.
 - **Run demo:** reset, inject Greater Manchester at r = 0.4, play at 1 s/day.
@@ -432,6 +439,6 @@ Judges will ask whether an AI should move medical supplies on its own. The answe
   internally on a transition.
 - **LLM.** The provider is Claude instead of the spec's Gemini 1.5. The LLM only
   writes the rationale and directives. Quantities are computed deterministically.
-- **Zones.** The 42 English ICBs replace the spec's "5 zip codes". The `zip_code`
+- **Zones.** The 36 English ICBs (April 2026) replace the spec's "5 zip codes". The `zip_code`
   column name is kept for schema compatibility.
 - **Stack.** The spec's Next.js/Streamlit options are replaced by React + Vite.

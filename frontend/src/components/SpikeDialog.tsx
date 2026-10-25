@@ -45,10 +45,10 @@ export function SpikeDialog({ zones, selected, onSelect, onInject, onClose }: Pr
   }
 
   return (
-    <div className="spike-dialog popover popover-right" role="dialog" aria-label="Simulate pathogen spike" data-testid="spike-dialog"
+    <div className="spike-dialog popover popover-right" role="dialog" aria-label="Viral surge scenario" data-testid="spike-dialog"
          onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <h2>Simulate a pathogen spike</h2>
-      <p className="hint">A hidden outbreak the system has to discover on its own.</p>
+      <h2>Add a viral surge scenario</h2>
+      <p className="hint">Choose an area and viral growth rate to explore how early-warning signals respond.</p>
       <label className="field">
         <span>Area</span>
         <select ref={select} value={selected} onChange={(e) => onSelect(e.target.value)} data-testid="spike-zone">
@@ -70,7 +70,7 @@ export function SpikeDialog({ zones, selected, onSelect, onInject, onClose }: Pr
       {error && <p className="error" role="alert" data-testid="spike-error">{error}</p>}
       <div className="dialog-actions">
         <button className="btn btn-primary" onClick={inject} disabled={!selected || sending} data-testid="spike-inject">
-          Inject spike
+          Add surge
         </button>
         <button className="btn" onClick={onClose}>Cancel</button>
       </div>

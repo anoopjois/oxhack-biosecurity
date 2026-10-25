@@ -29,10 +29,10 @@ export function Incidents({ events, zones, onSelect, onApprove, onOverride, onRe
   const names = useMemo(() => new Map(zones.map((z) => [z.zip_code, z.zone_name])), [zones])
   return (
     <section className="card incidents" data-testid="incidents">
-      <h2 className="card-title">Incidents</h2>
+      <h2 className="card-title">Viral outbreak alerts</h2>
       <div className="incident-list">
         {incidents.length === 0 && <p className="muted empty" data-testid="incidents-empty">
-          No incidents detected. Critical alerts appear here for review and notification approval.
+          No critical outbreak alerts. A high 48-hour risk forecast with clear viral growth opens an alert for review and report approval.
         </p>}
         {incidents.map((incident) => {
           const status = incident.report?.status ?? incident.opened?.status ?? 'awaiting_approval'
@@ -55,7 +55,7 @@ export function Incidents({ events, zones, onSelect, onApprove, onOverride, onRe
                 {recipient && <p>Recipient: <b>{recipient}</b></p>}
                 {status === 'awaiting_approval' && episodeId !== undefined && <>
                   <p>Approve to generate a professional incident PDF using Gemini and email it to the recipient.
-                    The report uses synthetic data and AI-generated wording. Nothing is sent without your approval.</p>
+                    The report includes AI-generated analysis. Nothing is sent without your approval.</p>
                   <div className="popover-actions">
                     <button className="btn btn-primary" data-testid="approve" disabled={busy || !onApprove}
                             onClick={() => onApprove?.(episodeId)}>Approve &amp; send report</button>

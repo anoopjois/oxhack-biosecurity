@@ -22,8 +22,8 @@ const incidents = [
   event('STATUS_CHANGE', { from: 'ELEVATED', to: 'CRITICAL', projected_score: 94 },
     { event_id: index * 2 + 2, zip_code: z.zip_code }),
   event('INCIDENT_OPENED', { episode_id: index + 1, status: 'awaiting_approval',
-    recipient: 'synthetic-exercise-notifications@example.test',
-    summary: `${z.zone_name} has a critical early-warning forecast. Review the synthetic evidence before approving a report.` },
+    recipient: 'outbreak-notifications@example.test',
+    summary: `${z.zone_name} has a critical early-warning forecast for viral outbreak risk. Review the observed signals before approving a report.` },
   { event_id: index * 2 + 3, zip_code: z.zip_code }),
 ])]
 
@@ -54,7 +54,7 @@ async function mockSimulation(page: Page, current: Clock, events: SimEvent[]) {
     throw new Error(`Unexpected API request: ${url.pathname}`)
   })
   await page.goto('/')
-  await expect(page.getByTestId('clock-day')).toBeVisible()
+  await expect(page.getByTestId('clock-date')).toBeVisible()
 }
 
 async function fitsHorizontally(page: Page) {
@@ -133,8 +133,8 @@ test('resizing preserves the map, chart, long names and all incident approval co
         await button.click({ trial: true })
         await insideViewport(button)
       }
-      await page.getByRole('button', { name: 'About Doubling' }).scrollIntoViewIfNeeded()
-      await page.getByRole('button', { name: 'About Doubling' }).click()
+      await page.getByRole('button', { name: 'About Viral doubling time' }).scrollIntoViewIfNeeded()
+      await page.getByRole('button', { name: 'About Viral doubling time' }).click()
       await insideViewport(page.getByRole('tooltip'))
       await page.keyboard.press('Escape')
       await fitsHorizontally(page)
@@ -167,15 +167,15 @@ test('header dialogs stay on screen and scroll at phone, tablet and landscape si
   }
 })
 
-test('coach and end-of-timeline actions fit without covering map zoom controls', async ({ page }) => {
+test('dashboard opens without a welcome popup and end-of-timeline actions remain accessible', async ({ page }) => {
   const current = clock({ day: 27, sim_date: '2026-09-28' })
   await mockSimulation(page, current, [])
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height })
     await page.evaluate(() => window.scrollTo(0, 0))
-    await insideViewport(page.getByTestId('coach'))
-    await page.getByTestId('coach-dismiss').scrollIntoViewIfNeeded()
-    await page.getByTestId('coach-dismiss').click({ trial: true })
+    await expect(page.getByRole('dialog', { name: 'Getting started' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Explore on my own' })).toHaveCount(0)
+    await expect(page.getByTestId('run-demo')).toBeVisible()
     await page.getByTestId('zoom-in').click({ trial: true })
     await fitsHorizontally(page)
   }
@@ -243,4 +243,39 @@ test('opening another header panel closes the previous panel', async ({ page }) 
   await page.getByTestId('speed').click()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('menu')).toBeHidden()
+})
+
+test('dashboard explains viral outbreak risk and its inputs without badges or simulation counters', async ({ page }, info) => {
+  await mockSimulation(page, clock({ day: 33, sim_date: '2026-10-04' }), incidents)
+  await expect(page.getByTestId('poc-badge')).toHaveCount(0)
+  await expect(page.getByText('Viral outbreak early warning', { exact: true })).toBeVisible()
+  const logo = page.getByRole('img', { name: 'BioSecure' })
+  await expect(logo).toBeVisible()
+  await expect.poll(() => logo.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true)
+  await expect(page.locator('.brand-dot')).toHaveCount(0)
+  await expect(page.getByText('BioSecure', { exact: true })).toHaveCount(0)
+  for (const width of [320, 1280]) {
+    await page.setViewportSize({ width, height: 720 })
+    const brand = await page.locator('.brand').evaluate((element) => {
+      const title = element.querySelector('img')!.getBoundingClientRect()
+      const purpose = element.querySelector('p')!.getBoundingClientRect()
+      return { beside: purpose.left >= title.right, overlappingRows: purpose.top < title.bottom && purpose.bottom > title.top }
+    })
+    expect(brand.beside && brand.overlappingRows).toBe(true)
+  }
+  await expect(page.getByTestId('clock-date')).toHaveAttribute('datetime', '2026-10-04')
+  await expect(page.locator('body')).not.toContainText(/proof of concept|synthetic|simulated data|day \d+ of \d+/i)
+  const explanation = page.getByTestId('risk-explanation')
+  await expect(explanation).toContainText('Wastewater viral load50%')
+  await expect(explanation).toContainText('A&E waiting-time pressure35%')
+  await expect(explanation).toContainText('Mobility & crowding15%')
+  await expect(explanation).toContainText('not an infection probability')
+  await page.screenshot({ path: info.outputPath('poc-overview.png') })
+  await page.getByRole('button', { name: 'Greater Manchester: 48-hour outbreak risk 94 out of 100' }).click()
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('Outbreak risk now')
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('Outbreak risk in 48h')
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('Viral doubling time')
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('82 / 100')
+  await expect(page.getByTestId('zone-panel').locator('.stats')).toContainText('94 / 100')
+  await expect(page.locator('body')).not.toContainText(/synthetic|simulated data|day \d+ of \d+/i)
 })

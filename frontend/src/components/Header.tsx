@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Clock } from '../api/types'
+import biosecureLogo from '../assets/biosecure-logo.jpeg'
 import { SHORTCUTS, SPEEDS, shortcutFor } from '../lib/behaviour'
-import { lastDay, longDate } from '../lib/format'
+import { longDate } from '../lib/format'
 import { RISK_SCORE_HELP } from '../lib/status'
 import { THEME_PREFS, type ThemePref } from '../state/useTheme'
 import type { BaseMode } from './MapView'
@@ -62,17 +63,16 @@ export function Header(p: Props) {
   return (
     <header className="header">
       <div className="brand">
-        <span className="brand-dot" aria-hidden />
-        <h1>BioSecure</h1>
-        <span className="badge-simulated" data-testid="simulated-badge">SIMULATED DATA</span>
+        <h1><img className="brand-logo" src={biosecureLogo} alt="BioSecure" width="1150" height="380" /></h1>
+        <p>Viral outbreak early warning</p>
       </div>
 
       <div className="when" data-testid="clock">
         {clock ? (
           <>
-            <strong className="when-date">{longDate(clock.sim_date)}</strong>
-            <span className="when-day" data-testid="clock-day">Day {clock.day} of {lastDay(clock)}</span>
-            {held && <span className="when-day when-held" data-testid="clock-held"> · alert awaiting approval</span>}
+            <span className="when-label">Assessment date</span>
+            <time className="when-date" dateTime={clock.sim_date} data-testid="clock-date">{longDate(clock.sim_date)}</time>
+            {held && <span className="when-held" data-testid="clock-held">Alert awaiting approval</span>}
           </>
         ) : <strong className="when-date">Connecting…</strong>}
       </div>
@@ -89,7 +89,7 @@ export function Header(p: Props) {
                   title={why ?? (playing ? 'Pause to step one day at a time' : 'Step one day (→)')}>⏭ Step</button>
           <div className="popover-anchor">
             <button onClick={() => { p.onClosePanels(); setSpeedOpen((o) => !o) }} disabled={!clock || atEnd} aria-haspopup="menu"
-                    aria-expanded={speedOpen} data-testid="speed" title={why ?? 'Seconds per simulated day'}>
+                    aria-expanded={speedOpen} data-testid="speed" title={why ?? 'Playback speed: seconds per day'}>
               {p.speed}s / day ▾
             </button>
             {speedOpen && (
@@ -108,7 +108,7 @@ export function Header(p: Props) {
                     data-testid="reset">↺</button>
             {p.confirmReset && (
               <div className="popover popover-right" role="dialog" aria-label="Confirm reset" data-testid="reset-confirm">
-                <p>Reset the simulation to day 27?</p>
+                <p>Restart the scenario? This clears incident reports and returns to the first assessment date.</p>
                 <div className="popover-actions">
                   <button className="btn btn-primary" ref={confirmButton} onClick={p.onConfirmReset}>Reset</button>
                   <button className="btn" onClick={p.onCancelReset}>Cancel</button>
@@ -120,7 +120,7 @@ export function Header(p: Props) {
 
         <div className="popover-anchor">
           <button className="btn" onClick={() => { setSpeedOpen(false); p.onSpike() }} disabled={!clock || atEnd} data-testid="spike"
-                  title={why ?? 'Inject a simulated outbreak (S)'}>⚠ Simulate spike</button>
+                  title={why ?? 'Add a viral outbreak scenario (S)'}>⚠ Add viral surge</button>
           {p.spikeSlot}
         </div>
         <button className="btn btn-primary" onClick={p.onRunDemo} disabled={!clock || p.busy} data-testid="run-demo">
@@ -165,7 +165,7 @@ export function Header(p: Props) {
                 <span><input type="checkbox" checked={p.showLog} onChange={(e) => p.onShowLog(e.target.checked)}
                              data-testid="show-log" /> Show the raw event log instead of incident cards</span>
               </label>
-              <h3>About the risk score</h3>
+              <h3>About viral outbreak risk</h3>
               <p className="muted">{RISK_SCORE_HELP}</p>
             </div>
           )}

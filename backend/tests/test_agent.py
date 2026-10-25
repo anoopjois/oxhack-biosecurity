@@ -1,6 +1,9 @@
 """Incident lifecycle, observed-only context, stock immutability and replay."""
 
 import json
+from io import BytesIO
+
+from pypdf import PdfReader
 
 from backend.db import fetch_inventory
 from backend.tests.agent_helpers import (
@@ -25,6 +28,9 @@ def test_incident_does_not_move_stock_or_run_old_actions(make_sim):
     assert types.isdisjoint({"AGENT_ALLOCATION", "AGENT_DIRECTIVE", "RIDESHARE_WEBHOOK"})
     context = json.loads(episode["context"])
     assert context["synthetic"]
+    assert "viral outbreak risk" in episode["summary"].lower()
+    assert "synthetic" not in episode["summary"].lower()
+    assert events(sim, "type = 'INCIDENT_OPENED'")[0]["payload"]["summary"] == episode["summary"]
     assert context["observed"]["status"] == "CRITICAL"
     assert "outbreaks" not in context and "start_day" not in context
     step_to_end(sim)  # pending notification does not block the clock or auto-approve
@@ -44,6 +50,30 @@ def test_exactly_one_incident_per_critical_transition(make_sim):
     with sim.lock, sim.conn:
         sim.agent.handle_transitions(sim, sim.current_day, [transition], sim._results)
     assert len(events(sim)) == count
+
+
+def test_merged_icbs_use_current_names_in_incidents_and_reports(make_sim):
+    service = FakeReportService()
+    sim = make_sim(report_service=service)
+    zones = ("central-east", "essex", "norfolk-and-suffolk", "west-and-north-london",
+             "thames-valley", "surrey-and-sussex")
+    force_transitions(sim, [(zone, "SAFE", "CRITICAL", 90.0) for zone in zones])
+    episodes = list(sim.conn.execute("SELECT * FROM agent_episodes ORDER BY episode_id"))
+    assert len(episodes) == len(zones)
+    for episode in episodes:
+        zone = sim.zones.set_index("zip_code").loc[episode["zip_code"]]
+        context = json.loads(episode["context"])
+        assert context["zone"] == {
+            "id": episode["zip_code"], "name": zone["zone_name"],
+            "region": zone["region"], "population": int(zone["population"]),
+        }
+        assert zone["zone_name"] in episode["summary"]
+        sim.decide(episode["episode_id"], "approve")
+    assert wait_for(lambda: len(service.sent) == len(zones))
+    for episode in episodes:
+        pdf = PdfReader(BytesIO(sim.report_pdf(episode["episode_id"])))
+        text = "\n".join(page.extract_text() for page in pdf.pages)
+        assert sim.zone_names[episode["zip_code"]] in text
 
 
 def test_close_and_reentry_preserves_separate_episodes(make_sim):

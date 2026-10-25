@@ -8,18 +8,25 @@ Use the [checklist](DEMO_CHECKLIST.md) first. All data and alerts are synthetic.
 Wastewater can show a rise before hospital pressure becomes obvious. We forecast
 risk 48 hours ahead so an operator can review a developing incident early."
 
-Point to the **SIMULATED DATA** badge and click **Run demo**.
+Point to **Viral outbreak early warning** beside the **BioSecure logo**. Explain
+that this presentation uses generated data, then click **Run demo**. The dashboard
+shows assessment dates rather than simulation day counters.
 
 ## 0:30 - Detection
 
 Greater Manchester turns amber and then red around day 31. Pause if useful.
 
-"Today's risk is about 62, while the forecast is about 83. The alert also requires
+"Today's risk is about 55, while the forecast is about 82. The alert also requires
 statistically significant positive growth; it is not just a noisy high measurement.
 The system sees only the telemetry observed so far, not our injected ground truth."
 
 Point to the zone chart and the incident's short summary. No incident card is shown
 before detection. The synthetic spike remains only a demo control/chart marker.
+
+"These are viral outbreak risk indices out of 100, not infection probabilities or
+confirmed cases. The inputs are wastewater viral load (50%), A&E waiting-time
+pressure (35%), and mobility/crowding (15%). Viral doubling time describes the
+wastewater signal, not the number of patients."
 
 ## 1:00 - Human-approved notification
 
@@ -41,11 +48,15 @@ There are no stock transfers or operational containment actions.
 
 ## 2:00 - Lead time and limitations
 
-Step to day 33 and point to the lead caption.
+Step to day 34 (5 October) and point to the lead caption.
 
-"In this seeded example the alert arrived two days before current risk reached 80.
+"In this seeded example the alert arrived three days before current risk reached 80.
 The engine's multi-seed validation is documented in the maths notes. This is a
 synthetic statistical demo, not a clinical diagnosis or identification of a pathogen."
+
+"With the current 36-area roster, the clean-data check found one false critical
+zone-day in 165,600 zone-days. The strict zero-false-alert requirement therefore
+does not pass; we have not tuned thresholds to hide it."
 
 "Real deployment would require validated surveillance data, authentication, durable
 delivery auditing, agreed authority routing and public-health governance. Today every

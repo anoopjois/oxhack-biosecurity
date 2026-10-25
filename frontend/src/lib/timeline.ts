@@ -6,7 +6,7 @@ export interface TimelineMarker {
   label: string
 }
 
-export const MARKER_LABELS = { spike: 'Spike', alert: 'Alert raised', hit: 'Would have hit 80' } as const
+export const MARKER_LABELS = { spike: 'Viral surge', alert: 'Alert raised', hit: 'Risk reached 80' } as const
 
 /** Markers on the day track: spike injected, alert raised (first CRITICAL), score would have hit 80. */
 export function timelineMarkers(firstDate: string, dates: { spike?: string; alert?: string; hit?: string }): TimelineMarker[] {

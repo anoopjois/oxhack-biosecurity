@@ -1,7 +1,7 @@
 # BioSecure: early warning and approved incident reporting
 
 This hackathon demo monitors synthetic wastewater and A&E telemetry across England's
-ICBs, forecasts risk 48 hours ahead, and opens an incident when the forecast is critical
+36 ICBs (the April 2026 structure), forecasts risk 48 hours ahead, and opens an incident when the forecast is critical
 and growth is statistically significant.
 
 **All data is synthetic. Reports and emails are prominently labelled as exercises.**
@@ -12,6 +12,44 @@ professional PDF, and emails it using SMTP. There is no auto-approval, stock tra
 rideshare action or separate briefing. Pending approvals and report delivery do not
 stop the simulation clock. Synthetic injection remains a demo control and chart marker,
 but no longer appears as a hidden step in incident cards.
+
+## ICB coverage
+
+[engine/zones.csv](engine/zones.csv) follows the 36 ICBs effective **1 April 2026**,
+verified against the [ONS names and codes register](https://geoportal.statistics.gov.uk/datasets/integrated-care-boards-april-2026-names-and-codes-in-en/explore).
+Names omit the common "NHS" prefix and "Integrated Care Board" suffix for display.
+
+| Current ICB | Former areas incorporated |
+|---|---|
+| Central East | Bedfordshire, Luton and Milton Keynes; Cambridgeshire and Peterborough; Hertfordshire, excluding West Essex |
+| Essex | Mid and South Essex; West Essex; North East Essex |
+| Norfolk and Suffolk | Norfolk and Waveney; Suffolk, excluding North East Essex |
+| West and North London | North West London; North Central London |
+| Thames Valley | Buckinghamshire, Oxfordshire and Berkshire West; East Berkshire from Frimley |
+| Surrey and Sussex | Surrey Heartlands; Sussex; Surrey areas from Frimley |
+
+Hampshire and Isle of Wight also gains the Hampshire areas of former Frimley.
+See the [NHS ODS merger summary](https://digital.nhs.uk/services/organisation-data-service/upcoming-code-changes/icb-mergers-2026-change-summary)
+for the organisational changes.
+
+Coordinates are representative map pins, not boundary polygons. Populations remain
+rounded **demo sizing estimates**, not official 2026 population statistics. Essex
+and Frimley estimates are apportioned between their successors rather than counted
+twice; the previous demo's total population is preserved.
+
+The backend, map, inventory and reports all read this shared roster; runtime zone
+counts are never fixed in code. Restart the backend after changing the roster:
+startup reloads it into SQLite and resets existing demo incidents and reports.
+Changing the number/order of zones changes seeded noise samples, so old recorded
+demo timings and 42-zone validation figures are not guarantees for the current run.
+
+**Known validation failure (36-ICB roster):** the unchanged detector produced
+**1 CRITICAL zone-day in 165,600 clean zone-days** across 200 seeds, so the required
+zero-false-CRITICAL test currently fails. The other 96 engine/backend tests pass.
+Lead-time requirements still pass: median 2 days and detection on or before the
+current-score crossing in 100% of seeds. This limitation is retained explicitly;
+the scoring thresholds, generator constants and test requirement were not relaxed.
+See [measured results](docs/MATHS.md#8-measured-results) for the distributions.
 
 ## Run on Windows
 
