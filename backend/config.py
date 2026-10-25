@@ -14,7 +14,7 @@ load_dotenv(REPO_ROOT / ".env")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-REPORT_TIMEOUT_S = float(os.getenv("REPORT_TIMEOUT_S", "90"))
+REPORT_TIMEOUT_S = float(os.getenv("REPORT_TIMEOUT_S", "600"))
 REPORT_WORKERS = 2
 REPORT_MAX_TOKENS = 4096
 REPORT_TEXT_MAX_CHARS = 6000
