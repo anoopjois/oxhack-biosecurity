@@ -47,6 +47,15 @@ SAFETY_FRACTION = 0.6     # a donor never drops below 60% of its normal per-capi
 MAX_DONORS = 3            # donors per alert, so the feed stays readable
 EARTH_RADIUS_KM = 6371.0  # for the haversine distance
 
+# Agent: donor reserve, in days of normal use (see reserve_days in backend/agent/allocation.py)
+NORMAL_STOCK_DAYS = 7.0   # a hub's normal per-capita stock l_k*P lasts this many days at normal use
+
+# Agent: human approval of stock moves. The tick only proposes transfers; stock moves when an
+# operator approves, or automatically once nobody has objected for APPROVAL_TIMEOUT_S seconds.
+# The simulation clock is held while a decision is pending. 0 = no approval step (moves in the tick).
+APPROVAL_TIMEOUT_S = float(os.getenv("APPROVAL_TIMEOUT_S", "30"))
+APPROVAL_POLL_S = 0.25    # how often the server checks for expired approvals
+
 # Agent: rideshare containment (mock webhook)
 RIDESHARE_REVIEW_DAYS = 7
 RIDESHARE_RADIUS_KM = 25.0
@@ -75,3 +84,4 @@ class Settings:
     seed: int = SIM_SEED
     start_date: date = date.fromisoformat(SIM_START_DATE)
     seconds_per_day: float = CLOCK_SECONDS_PER_DAY
+    approval_timeout_s: float = APPROVAL_TIMEOUT_S

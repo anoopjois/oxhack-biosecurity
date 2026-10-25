@@ -53,22 +53,22 @@ export function ScoreChart({ days, spike, alert, hit }: Props) {
              aria-label="Risk now and the 48-hour forecast over time">
           {[0, 40].map((v) => (
             <g key={v}>
-              <line x1={PAD.left} x2={w - PAD.right} y1={Y(v)} y2={Y(v)} stroke="#ecede8" />
+              <line x1={PAD.left} x2={w - PAD.right} y1={Y(v)} y2={Y(v)} style={{ stroke: 'var(--grid)' }} />
               <text x={PAD.left - 6} y={Y(v) + 4} className="axis" textAnchor="end">{v}</text>
             </g>
           ))}
           {iAlert >= 0 && iHit > iAlert && (
             <rect x={X(iAlert)} y={PAD.top} width={X(iHit) - X(iAlert)} height={h - PAD.top - PAD.bottom}
-                  fill="#d03b3b" opacity={0.09} data-testid="lead-band" />
+                  style={{ fill: 'var(--critical)' }} opacity={0.09} data-testid="lead-band" />
           )}
-          <line x1={PAD.left} x2={w - PAD.right} y1={Y(CRITICAL_LINE)} y2={Y(CRITICAL_LINE)} stroke="#d03b3b" strokeDasharray="5 4" />
+          <line x1={PAD.left} x2={w - PAD.right} y1={Y(CRITICAL_LINE)} y2={Y(CRITICAL_LINE)} style={{ stroke: 'var(--critical)' }} strokeDasharray="5 4" />
           <text x={PAD.left - 6} y={Y(CRITICAL_LINE) + 4} className="axis axis-critical" textAnchor="end">80</text>
           <text x={PAD.left + 4} y={Y(CRITICAL_LINE) - 5} className="axis axis-critical">Critical</text>
           {iSpike >= 0 && <Marker x={X(iSpike)} top={PAD.top} bottom={h - PAD.bottom} label="Spike" kind="spike" maxX={w} />}
           {iAlert >= 0 && <Marker x={X(iAlert)} top={PAD.top} bottom={h - PAD.bottom} label="Alert" kind="alert" maxX={w} />}
-          <path d={path('projected_score')} fill="none" stroke={SERIES.forecast} strokeWidth={2.5} strokeDasharray="6 4" />
-          <path d={path('score')} fill="none" stroke={SERIES.current} strokeWidth={2.5} />
-          {iHit >= 0 && <circle cx={X(iHit)} cy={Y(days[iHit].score ?? 0)} r={5} fill="#fff" stroke="#d03b3b" strokeWidth={2.5} />}
+          <path d={path('projected_score')} fill="none" style={{ stroke: SERIES.forecast }} strokeWidth={2.5} strokeDasharray="6 4" />
+          <path d={path('score')} fill="none" style={{ stroke: SERIES.current }} strokeWidth={2.5} />
+          {iHit >= 0 && <circle cx={X(iHit)} cy={Y(days[iHit].score ?? 0)} r={5} style={{ fill: 'var(--surface)', stroke: 'var(--critical)' }} strokeWidth={2.5} />}
           {ticks.map((i) => (
             <text key={i} x={X(i)} y={h - 4} className="axis" textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>
               {shortDate(days[i].date)}
@@ -76,9 +76,9 @@ export function ScoreChart({ days, spike, alert, hit }: Props) {
           ))}
           {hover !== null && (
             <g pointerEvents="none">
-              <line x1={X(hover)} x2={X(hover)} y1={PAD.top} y2={h - PAD.bottom} stroke="#9ca3af" />
-              <circle cx={X(hover)} cy={Y(days[hover].score ?? 0)} r={4} fill={SERIES.current} />
-              <circle cx={X(hover)} cy={Y(days[hover].projected_score ?? 0)} r={4} fill={SERIES.forecast} />
+              <line x1={X(hover)} x2={X(hover)} y1={PAD.top} y2={h - PAD.bottom} style={{ stroke: 'var(--faint)' }} />
+              <circle cx={X(hover)} cy={Y(days[hover].score ?? 0)} r={4} style={{ fill: SERIES.current }} />
+              <circle cx={X(hover)} cy={Y(days[hover].projected_score ?? 0)} r={4} style={{ fill: SERIES.forecast }} />
               <foreignObject x={Math.min(X(hover) + 8, w - 168)} y={PAD.top} width={160} height={58}>
                 <div className="chart-tip">
                   <strong>{shortDate(days[hover].date)}</strong>
@@ -95,13 +95,13 @@ export function ScoreChart({ days, spike, alert, hit }: Props) {
 }
 
 function Marker({ x, top, bottom, label, kind, maxX }: { x: number; top: number; bottom: number; label: string; kind: 'spike' | 'alert'; maxX: number }) {
-  const color = kind === 'alert' ? '#d03b3b' : '#4b5563'
+  const color = kind === 'alert' ? 'var(--critical)' : 'var(--spike-pill)'
   const width = label.length * 7 + 14
   const pillX = Math.min(Math.max(x, width / 2 + 2), maxX - width / 2 - 2)
   return (
     <g data-testid={`chart-${kind}`}>
-      <line x1={x} x2={x} y1={top} y2={bottom} stroke={color} strokeWidth={1.5} strokeDasharray={kind === 'spike' ? '3 3' : undefined} />
-      <rect x={pillX - width / 2} y={2} width={width} height={18} rx={9} fill={color} />
+      <line x1={x} x2={x} y1={top} y2={bottom} style={{ stroke: color }} strokeWidth={1.5} strokeDasharray={kind === 'spike' ? '3 3' : undefined} />
+      <rect x={pillX - width / 2} y={2} width={width} height={18} rx={9} style={{ fill: color }} />
       <text x={pillX} y={15} className="marker-label" textAnchor="middle">{label}</text>
     </g>
   )

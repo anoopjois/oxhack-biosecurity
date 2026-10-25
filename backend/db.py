@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS events (
     sim_date   TEXT NOT NULL,
     created_at TEXT NOT NULL,                        -- wall clock; excluded from reproducibility
     type       TEXT NOT NULL,                        -- STATUS_CHANGE | OUTBREAK_INJECTED | TIMELINE_END |
-                                                     -- AGENT_ALLOCATION | AGENT_DIRECTIVE | RIDESHARE_WEBHOOK
+                                                     -- AGENT_ALLOCATION | AGENT_DECISION | AGENT_DIRECTIVE |
+                                                     -- RIDESHARE_WEBHOOK
     severity   TEXT NOT NULL,                        -- info | warning | critical
     zip_code   TEXT REFERENCES zones,
     message    TEXT NOT NULL,
@@ -76,7 +77,11 @@ CREATE TABLE IF NOT EXISTS agent_episodes (
     closed_date      TEXT,
     context          TEXT NOT NULL,                  -- JSON given to the template and the LLM
     llm_status       TEXT NOT NULL,                  -- not_configured | pending | done | refused | failed:* | rejected:*
-    directive_source TEXT NOT NULL                   -- template | llm
+    directive_source TEXT NOT NULL,                  -- template | llm
+    plan             TEXT NOT NULL,                  -- JSON: the proposed transfers (moved only once approved)
+    decision         TEXT NOT NULL,                  -- pending | approved | overridden
+    decided_by       TEXT,                           -- operator | timeout | policy (no approval step)
+    decided_date     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS transfers (
@@ -97,7 +102,7 @@ CREATE TABLE IF NOT EXISTS transfers (
 CREATE TABLE IF NOT EXISTS actions (
     seq      INTEGER PRIMARY KEY AUTOINCREMENT,
     sim_date TEXT NOT NULL,
-    kind     TEXT NOT NULL,                          -- reset | step | trigger_outbreak
+    kind     TEXT NOT NULL,                          -- reset | step | trigger_outbreak | decide_allocation
     payload  TEXT NOT NULL                           -- JSON
 );
 """
@@ -117,7 +122,7 @@ def connect(path: Path) -> sqlite3.Connection:
 
 # Bump when the schema changes. Every table holds state a reset regenerates (zones is reloaded
 # from zones.csv at startup), so on a mismatch we simply drop and recreate everything.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 ALL_TABLES = ["transfers", "agent_episodes", "zone_status", "telemetry_logs", "hospital_inventories",
               "events", "actions", "zones"]
 

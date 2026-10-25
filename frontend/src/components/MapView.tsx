@@ -32,14 +32,17 @@ interface Props {
 // Leave room for the legend along the bottom edge.
 const FIT: L.FitBoundsOptions = { paddingTopLeft: [20, 20], paddingBottomRight: [20, 56] }
 const FOCUS: L.FitBoundsOptions = { paddingTopLeft: [150, 90], paddingBottomRight: [150, 110], maxZoom: 8 }
+// Closest zoom the + button allows: a single area fills the map, and tiles are still sharp.
+const MAX_ZOOM = 10
 
 export function MapView(p: Props) {
   const counts = countByStatus(p.zones.map((z) => z.status))
   return (
     <div className={`map-wrap map-${p.mode}${p.picking ? ' map-picking' : ''}`} data-testid="map">
       <MapContainer bounds={ENGLAND_BOUNDS} boundsOptions={FIT} zoomSnap={0.1} zoomControl={false}
-                    attributionControl={false} className="map" maxBoundsViscosity={1}>
+                    attributionControl={false} className="map" maxBoundsViscosity={1} maxZoom={MAX_ZOOM}>
         <Fit mode={p.mode} focused={p.arcs !== null} />
+        <ZoomControls />
         <Camera arcs={p.arcs} zones={p.zones} />
         <Pane name="base" style={{ zIndex: 200 }} />
         <Pane name="cities" style={{ zIndex: 390 }} />
@@ -70,13 +73,50 @@ export function MapView(p: Props) {
   )
 }
 
+/** Land colours come from CSS (.base-shape), so they follow the light/dark theme. */
 function outlineStyle(feature?: GeoJSON.Feature) {
   const england = feature?.properties?.role === 'england'
-  return {
-    className: england ? 'base-shape base-england' : 'base-shape',
-    color: england ? '#a9aca4' : '#cfd1ca', weight: england ? 1.2 : 1,
-    fillColor: england ? '#fbfbf8' : '#eeeeea', fillOpacity: 1,
+  return { className: england ? 'base-shape base-england' : 'base-shape', weight: england ? 1.2 : 1, fillOpacity: 1 }
+}
+
+/**
+ * Zoom in / out / back to England. Steps are whole zoom levels, so tiles mode stays on
+ * integer zoom (no tile seams). Clicks and scrolls on the buttons don't reach the map.
+ */
+function ZoomControls() {
+  const map = useMap()
+  const box = useRef<HTMLDivElement>(null)
+  const [zoom, setZoom] = useState(() => map.getZoom())
+  // Leaflet ignores setZoom while a zoom animation runs, so quick clicks would be lost:
+  // remember where the buttons are heading and finish the move when the animation ends.
+  const target = useRef<number | null>(null)
+  useMapEvents({
+    zoomend: () => {
+      setZoom(map.getZoom())
+      if (target.current !== null && Math.abs(map.getZoom() - target.current) > 0.01) map.setZoom(target.current)
+      else target.current = null
+    },
+  })
+  useEffect(() => {
+    if (!box.current) return
+    L.DomEvent.disableClickPropagation(box.current)
+    L.DomEvent.disableScrollPropagation(box.current)
+  }, [])
+  const step = (delta: number) => {
+    const from = target.current ?? map.getZoom()
+    target.current = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), Math.round(from) + delta))
+    map.setZoom(target.current)
   }
+  return (
+    <div className="zoom-controls" ref={box} role="group" aria-label="Map zoom" data-testid="zoom-controls">
+      <button onClick={() => step(1)} disabled={zoom >= map.getMaxZoom()} aria-label="Zoom in" title="Zoom in"
+              data-testid="zoom-in">+</button>
+      <button onClick={() => step(-1)} disabled={zoom <= map.getMinZoom() + 0.01} aria-label="Zoom out" title="Zoom out"
+              data-testid="zoom-out">−</button>
+      <button onClick={() => map.flyToBounds(ENGLAND_BOUNDS, { ...FIT, duration: 0.8 })} aria-label="Show all of England"
+              title="Show all of England" data-testid="zoom-fit">⤢</button>
+    </div>
+  )
 }
 
 /**
@@ -285,7 +325,10 @@ function Arcs({ arcs, zones }: { arcs: ArcSet; zones: Zone[] }) {
           className: '', iconSize: [0, 0],
           html: `<div class="arc-label" style="transform: ${labelOffset(donorAt, [target.latitude, target.longitude])}">` +
             `<strong>${escapeHtml(shortName(t.donor_name))} · ${Math.round(t.distance_km)} km</strong>` +
-            `<span>${compact(t.ppe_units)} PPE · ${compact(t.antiviral_doses)} antivirals · ${compact(t.vaccine_doses)} vaccines</span></div>`,
+            `<span>${compact(t.ppe_units)} PPE · ${compact(t.antiviral_doses)} antivirals · ${compact(t.vaccine_doses)} vaccines</span>` +
+            (t.reserve_days_after === undefined ? ''
+              : `<span class="arc-reserve">🛡 keeps ${t.reserve_days_after.toFixed(1)} days of reserve</span>`) +
+            `</div>`,
         })
         return { key: `${arcs.key}-${alloc.episode_id}-${t.donor}`, points, arrow, label, donorAt }
       }).filter((d) => d !== null)
@@ -297,7 +340,7 @@ function Arcs({ arcs, zones }: { arcs: ArcSet; zones: Zone[] }) {
       {drawn.map((d) => (
         <span key={d.key}>
           <Polyline positions={d.points} interactive={false}
-                    pathOptions={{ color: '#2a78d6', weight: 4, opacity: 0.95, lineCap: 'round', className: 'arc' }} />
+                    pathOptions={{ weight: 4, opacity: 0.95, lineCap: 'round', className: 'arc' }} />
           <Marker position={d.points[ARROW_INDEX]} icon={d.arrow} interactive={false} />
           {labelsVisible && <Marker position={d.donorAt} icon={d.label} interactive={false} />}
         </span>

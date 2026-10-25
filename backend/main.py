@@ -12,10 +12,10 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
 from backend import config, db
-from backend.clock import run_clock
+from backend.clock import run_approvals, run_clock
 from backend.schemas import (
-    ClockResponse, EventsResponse, InventoryResponse, MapStatus, PlayRequest, ResetRequest,
-    StepResponse, TriggerRequest, TriggerResponse, ZoneHistory,
+    ClockResponse, DecisionResponse, EventsResponse, InventoryResponse, MapStatus, PlayRequest,
+    ResetRequest, StepResponse, TriggerRequest, TriggerResponse, ZoneHistory,
 )
 from backend.simulation import DEFAULT_WRITER, Simulation, SimulationError
 from engine.zones import load_zones
@@ -32,11 +32,12 @@ def create_app(settings: config.Settings | None = None, directive_writer=DEFAULT
         sim = Simulation(settings, directive_writer=directive_writer)
         control = asyncio.Event()
         app.state.sim, app.state.control = sim, control
-        task = asyncio.create_task(run_clock(sim, control))
+        tasks = [asyncio.create_task(run_clock(sim, control)), asyncio.create_task(run_approvals(sim))]
         yield
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
         sim.close()
 
     app = FastAPI(title="Biosecurity Autobalancer", lifespan=lifespan)
@@ -84,6 +85,16 @@ def create_app(settings: config.Settings | None = None, directive_writer=DEFAULT
     @app.post(f"{P}/trigger-outbreak", response_model=TriggerResponse, status_code=201)
     async def trigger_outbreak(request: Request, body: TriggerRequest):
         return await asyncio.to_thread(sim(request).trigger_outbreak, body.zone, body.r)
+
+    @app.post(f"{P}/episodes/{{episode_id}}/approve", response_model=DecisionResponse)
+    async def approve(request: Request, episode_id: int):
+        """An operator approves a proposed stock move: the stock moves now."""
+        return await asyncio.to_thread(sim(request).decide, episode_id, "approve")
+
+    @app.post(f"{P}/episodes/{{episode_id}}/override", response_model=DecisionResponse)
+    async def override(request: Request, episode_id: int):
+        """An operator overrides (rejects) a proposed stock move: nothing moves."""
+        return await asyncio.to_thread(sim(request).decide, episode_id, "override")
 
     @app.post(f"{P}/clock/play", response_model=ClockResponse)
     async def play(request: Request, body: PlayRequest | None = None):

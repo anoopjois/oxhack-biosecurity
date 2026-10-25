@@ -14,6 +14,11 @@ Invariants:
     I1  An injected outbreak starts at the current day (multiplier 1 there), so only
         later days change; ingested telemetry is never rewritten.
     I2  State is a function of (seed, ordered actions log); `apply_actions` replays it.
+        Approval decisions (operator or timeout) are logged actions too.
+
+Approvals: a CRITICAL entry only proposes its stock move. While any proposal is pending the
+clock is held (step raises AwaitingApproval); `decide` settles one, and `expire_due`
+auto-approves those nobody objected to within the timeout (wall clock, driven by main.py).
 """
 
 import json
@@ -51,6 +56,13 @@ class Conflict(SimulationError):
 
 class Invalid(SimulationError):
     status_code = 422
+
+
+class AwaitingApproval(Conflict):
+    """The clock is held until every proposed stock move is approved or overridden."""
+
+
+DECISIONS = {"approve": "approved", "override": "overridden"}
 
 
 @dataclass(frozen=True)
@@ -109,7 +121,9 @@ class Simulation:
         self.seconds_per_day = settings.seconds_per_day
         self.seed = settings.seed
         writer: DirectiveWriter | None = make_writer() if directive_writer is DEFAULT_WRITER else directive_writer
-        self.agent = Agent(self.zones, rideshare or MockRideshare(), writer, self.attach_llm_result)
+        self.agent = Agent(self.zones, rideshare or MockRideshare(), writer, self.attach_llm_result,
+                           settings.approval_timeout_s)
+        self._deadlines: dict[int, tuple[str, float]] = {}  # pending episode -> (zone, monotonic deadline)
 
         self.conn = db.connect(settings.db_path)
         db.init_schema(self.conn)
@@ -139,6 +153,10 @@ class Simulation:
     def at_end(self) -> bool:
         return self.current_day >= self.last_day
 
+    @property
+    def awaiting_approval(self) -> bool:
+        return bool(self._deadlines)
+
     def clock(self) -> dict:
         return {
             "day": self.current_day,
@@ -150,7 +168,16 @@ class Simulation:
             "at_end": self.at_end,
             "seed": self.seed,
             "run": self.generation,  # changes on every reset; the frontend clears its caches
+            "awaiting_approval": self.awaiting_approval,  # the clock is held for a decision
         }
+
+    def _approvals(self) -> list[dict]:
+        """Pending stock moves with the seconds left before they auto-approve."""
+        now = time.monotonic()
+        return [{"episode_id": episode_id, "zip_code": zip_code,
+                 "seconds_left": round(max(0.0, deadline - now), 1),
+                 "timeout_s": self.settings.approval_timeout_s}
+                for episode_id, (zip_code, deadline) in sorted(self._deadlines.items())]
 
     def add_transition_listener(self, listener: TransitionListener) -> None:
         """Called with each tick's transitions, after commit and outside the lock."""
@@ -221,7 +248,7 @@ class Simulation:
     # ------------------------------------------------------------------ reads
     def map_status(self) -> dict:
         with self.lock:
-            return {"clock": self.clock(), "zones": self._zones_snapshot}
+            return {"clock": self.clock(), "zones": self._zones_snapshot, "approvals": self._approvals()}
 
     def get_clock(self) -> dict:
         with self.lock:
@@ -257,6 +284,7 @@ class Simulation:
             data = generate(self.zones["zip_code"].tolist(), self.n_days,
                             self.settings.start_date, seed)
             self.generation += 1
+            self._deadlines = {}
             with self.conn:
                 db.clear_for_reset(self.conn)
                 self.data, self.seed, self.current_day, self.playing = data, seed, self.start_day, False
@@ -275,6 +303,8 @@ class Simulation:
         with self.lock:
             if self.at_end:
                 raise Conflict("already at the last simulated day")
+            if self.awaiting_approval:
+                raise AwaitingApproval("waiting for a decision on a proposed stock move")
             day = self.current_day + 1
             transitions: list[Transition] = []
             with self.conn:
@@ -301,6 +331,10 @@ class Simulation:
                 self._log_action(day, "step", {"source": source})
             # Commit succeeded: only now update in-memory state.
             self.current_day, self._results = day, results
+            deadline = time.monotonic() + self.settings.approval_timeout_s
+            for row in self.conn.execute("SELECT episode_id, zip_code FROM agent_episodes "
+                                         "WHERE decision = 'pending'"):
+                self._deadlines.setdefault(row["episode_id"], (row["zip_code"], deadline))
             if self.at_end:
                 self.playing = False
             self._build_snapshot()
@@ -332,6 +366,38 @@ class Simulation:
                 else:
                     self.conn.execute("UPDATE agent_episodes SET llm_status = ? WHERE episode_id = ?",
                                       (outcome.status, episode_id))
+
+    def decide(self, episode_id: int, decision: str, by: str = "operator") -> dict:
+        """Approve or override a pending stock move (decision: approve | override)."""
+        with self.lock:
+            if decision not in DECISIONS:
+                raise Invalid(f"decision must be one of {sorted(DECISIONS)}")
+            row = self.conn.execute("SELECT decision FROM agent_episodes WHERE episode_id = ?",
+                                    (episode_id,)).fetchone()
+            if row is None:
+                raise NotFound(f"unknown episode: {episode_id}")
+            if row["decision"] != "pending":
+                raise Conflict(f"episode {episode_id} was already {row['decision']}")
+            with self.conn:
+                event = self.agent.decide(self, self.current_day, episode_id, DECISIONS[decision], by)
+                self._log_action(self.current_day, "decide_allocation",
+                                 {"episode_id": episode_id, "decision": decision, "by": by})
+            self._deadlines.pop(episode_id, None)
+            return {"event": event, "clock": self.clock()}
+
+    def expire_due(self, now: float | None = None) -> list[int]:
+        """Auto-approve every pending move whose deadline has passed. Returns their episode ids."""
+        now = time.monotonic() if now is None else now
+        with self.lock:
+            due = [e for e, (_, deadline) in self._deadlines.items() if deadline <= now]
+        approved = []
+        for episode_id in sorted(due):
+            try:
+                self.decide(episode_id, "approve", by="timeout")
+                approved.append(episode_id)
+            except (Conflict, NotFound):
+                pass  # an operator decided (or a reset happened) in the meantime
+        return approved
 
     def _transition_message(self, zip_code: str, old: str, new: dict) -> str:
         name = self.zone_names[zip_code]
@@ -401,5 +467,7 @@ class Simulation:
                 self.step(source=action["source"])
             elif action["kind"] == "trigger_outbreak":
                 self.trigger_outbreak(action["zone"], action["r"])
+            elif action["kind"] == "decide_allocation":
+                self.decide(action["episode_id"], action["decision"], action["by"])
             else:
                 raise ValueError(f"unknown action: {action['kind']}")

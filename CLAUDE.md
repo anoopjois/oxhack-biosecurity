@@ -236,7 +236,8 @@ Code lives in `backend/agent/`: `allocation.py` (pure maths), `executor.py`,
 - When an episode closes, pooled rides are re-enabled. Stock is not returned.
 
 **Events, in tick order**
-1. `AGENT_ALLOCATION`
+1. `AGENT_ALLOCATION` (the proposal; see Phase 5)
+   - With no approval step, or nothing to move, `AGENT_DECISION` (`by: policy`) follows at once.
 2. `AGENT_DIRECTIVE`, carrying `source` and `source_label`:
    - `template` is labelled **"Rule-based briefing"**;
    - `llm` is labelled **"AI briefing (Claude)"**.
@@ -268,6 +269,48 @@ Code lives in `backend/agent/`: `allocation.py` (pure maths), `executor.py`,
 - `scripts/llm_smoke.py` makes one real call with a real episode context. Run it
   manually once a key exists.
 
+### Human approval and donor reserve (Phase 5)
+Judges will ask whether an AI should move medical supplies on its own. The answer is
+"it proposes; a person can stop it; silence counts as consent after 30 s".
+
+**Approval flow**
+- A CRITICAL entry only **proposes** its transfers. The plan is stored in
+  `agent_episodes.plan` with `decision = pending`, and no stock moves.
+- `POST /episodes/{id}/approve` moves the stock. `POST /episodes/{id}/override` moves
+  nothing. A second decision returns 409.
+- `APPROVAL_TIMEOUT_S` (default 30, wall clock) auto-approves (`by: timeout`).
+  - `run_approvals` in `backend/clock.py` polls every `APPROVAL_POLL_S`.
+  - `0` turns the approval step off: stock moves in the tick (`by: policy`). Most tests use
+    this setting; `test_approval.py` turns the step on.
+- **The clock is held** while any decision is pending:
+  - `clock.awaiting_approval` is true;
+  - `step` raises `AwaitingApproval` (409);
+  - the clock loop stays in play mode and resumes by itself after the decision.
+- Every decision writes an `AGENT_DECISION` event (`decision`, `by`, actual transfers).
+
+**Invariants (tested)**
+- **Reservations:** same-tick proposals are computed as if every pending plan were already
+  applied. Donors only give, so approving or overriding any subset of plans keeps every
+  donor at or above its safety level, and total stock is conserved.
+- **I2:** decisions are logged as `decide_allocation` actions (including `by: timeout`), so
+  `apply_actions` replays them exactly.
+
+**Donor reserve, in days**
+- `u_k = ℓ_k·P / NORMAL_STOCK_DAYS` (D = 7) is normal daily use.
+- `R = min_k S_k / u_k` is the days the scarcest item lasts.
+- The safety level guarantees `R ≥ SAFETY_FRACTION·D = 4.2` days.
+- A large surge deficit takes each donor's full surplus, so donors often end exactly at
+  4.2 days.
+- It is shown on the incident card, in the details table and on the map's arc labels.
+
+**Frontend**
+- Approval box: a countdown ring with **Approve now** and **Override**. It scrolls into view
+  when it appears.
+- Arcs stay while a decision is pending and clear on override.
+- Map zoom buttons +, − and ⤢ (back to England) step by whole zoom levels.
+- Theme: Auto / Light / Dark, set from the header button or the "?" menu. It is stored in
+  `localStorage` and applied as `data-theme` on `<html>`. Every colour is a CSS token.
+
 ## API
 
 - `GET  /api/v1/map-status`
@@ -276,6 +319,7 @@ Code lives in `backend/agent/`: `allocation.py` (pure maths), `executor.py`,
 - `POST /api/v1/trigger-outbreak` with body `{zone, r}`
 - `POST /api/v1/clock/play`, `/api/v1/clock/pause`, `/api/v1/clock/step`,
   `/api/v1/clock/reset`
+- `POST /api/v1/episodes/{id}/approve`, `/api/v1/episodes/{id}/override`
 - `GET  /api/v1/zones/{zip_code}/history`
 
 ## Frontend

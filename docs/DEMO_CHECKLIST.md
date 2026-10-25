@@ -9,6 +9,24 @@ They never fire while a form field has focus.
 
 Screenshots of each state are in `docs/figures/ui-*.png`.
 
+## The one-click demo
+1. ☐ On first load a card reads "Watch an outbreak unfold". Click **★ Run demo** (on the
+   card or in the header). It resets, injects a hidden spike in Greater Manchester at
+   r = 0.4, and plays at 1 s per simulated day.
+2. ☐ After about 4 s (Fri 2 Oct, Day 31 of 41), Greater Manchester's ring turns **red and
+   pulses**. The map flies in, and blue arcs draw from 3 nearby areas. Each arc is labelled
+   with the distance, the quantities and "🛡 keeps 4.2 days of reserve".
+3. ☐ **The human check.** The header reads "· waiting for approval" and the clock holds.
+   The incident card shows **Stock move proposed** with a countdown ring: "Auto-approves in
+   30 s unless someone objects".
+   - Say: *"The AI never moves medical supplies on its own. It proposes, and a person can
+     stop it. If nobody objects within 30 seconds it goes ahead, so it is safe and still
+     fast."*
+   - Point at the 🛡 line: *"And it doesn't just move the shortage. Every donor keeps at
+     least 4.2 days of its normal use."*
+   - Click **✓ Approve now** (or let the timer run out). The step reads "✓ Approved by
+     operator" (or "Auto-approved: nobody objected within 30 s"), and the clock carries on.
+4. ☐ Press <kbd>Space</kbd> to pause, then talk through the screen.
 ## Before the show (10 minutes out)
 1. ☐ **Start it.** Run `./dev.sh`. It prints the backend and frontend URLs.
    - On a fresh machine, the first run also creates `.venv` and installs npm packages.
@@ -91,11 +109,14 @@ With the default seed (42), the run is the same every time:
    - The caption reads "Risk is rising. No alert yet…".
 7. ☐ **The CRITICAL tick:** keep pressing <kbd>→</kbd>. Around 2 Oct, in one step:
    - ☐ the ring turns red and pulses; the camera flies in; 3 arcs draw into Greater Manchester;
-   - ☐ the incident card fills in: Detected → Stock moved ("PPE 54k → 116k…") →
-     Briefing ("Rule-based briefing") → Containment ("Pooled rideshare paused…");
+   - ☐ the incident card fills in: Detected → **Stock move proposed** ("PPE 54k → 116k…",
+     the 🛡 donor-reserve line and the approval countdown) → Briefing ("Rule-based
+     briefing") → Containment ("Pooled rideshare paused…");
+   - ☐ **Step** is greyed out ("Waiting for a decision on the proposed stock move"). Click
+     **✓ Approve now**: the step becomes "Stock moved · ✓ Approved by operator";
    - ☐ the chart shows **Spike** and **Alert** markers, and the timeline shows "Alert raised".
-8. ☐ **Details:** in the card, click **Details** for the stock table (each donor and its
-   distance), and **Read rationale & 5 actions** for the briefing, with
+8. ☐ **Details:** in the card, click **Details** for the stock table (each donor, its
+   distance and its reserve after giving), and **Read rationale & 5 actions** for the briefing, with
    IMMEDIATE / 24H / 72H badges.
 9. ☐ **Lead time:** step 2–3 more days. The caption reads "⚡ Alert raised **2 days** before
    the risk score reached 80", with a shaded band on the chart. The timeline gains
@@ -121,5 +142,13 @@ With the default seed (42), the run is the same every time:
     `./dev.sh`. Repeat step 7. A few seconds later the briefing switches in place to
     **"AI briefing (Claude)"**, marked "updated". `scripts/llm_smoke.py` tests the key on
     its own.
-17. ☐ **Projector check:** from the back of the room, the date, status chips, card steps,
+17. ☐ **Override:** reset, inject a spike and step to CRITICAL, then click **Override**.
+    The step reads "Stock move overridden": no stock moved, the arcs clear, and the clock
+    can run on.
+18. ☐ **Zoom:** use **+** / **−** at the map's top-left to zoom by whole levels, and **⤢**
+    to return to all of England.
+19. ☐ **Dark mode:** click the ◐ button next to **?**: Auto → ☀ Light → ☾ Dark. The map,
+    chart and cards all switch, and the choice is remembered on reload. It is also in
+    **?** → Theme.
+20. ☐ **Projector check:** from the back of the room, the date, status chips, card steps,
     arc labels and the timeline are readable. Red only ever means CRITICAL.

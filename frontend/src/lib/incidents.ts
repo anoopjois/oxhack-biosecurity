@@ -1,8 +1,9 @@
-import type { AllocationPayload, DirectivePayload, SimEvent, StatusChangePayload } from '../api/types'
+import type { AllocationPayload, DecisionPayload, DirectivePayload, SimEvent, StatusChangePayload } from '../api/types'
 
 /**
  * One incident per outbreak, built from the event stream. Steps fill in as they happen:
- *   injected (audience-only ground truth) -> detected -> stock moved -> briefing -> containment
+ *   injected (audience-only ground truth) -> detected -> stock proposed -> approved / overridden
+ *   -> briefing -> containment
  * Simultaneous outbreaks never interleave: each event is routed to its own incident by zone
  * (before detection) or by agent episode id (after).
  */
@@ -11,7 +12,8 @@ export interface Incident {
   zip: string
   injected?: SimEvent      // OUTBREAK_INJECTED: the system never sees this
   detected?: SimEvent      // STATUS_CHANGE to CRITICAL
-  allocation?: SimEvent    // AGENT_ALLOCATION
+  allocation?: SimEvent    // AGENT_ALLOCATION: the proposed stock move
+  decision?: SimEvent      // AGENT_DECISION: approved (stock moved) or overridden
   briefing?: SimEvent      // latest AGENT_DIRECTIVE (an AI briefing replaces the rule-based one)
   briefingUpdated: boolean
   containment?: SimEvent   // RIDESHARE_WEBHOOK disable
@@ -67,6 +69,12 @@ export function buildIncidents(events: SimEvent[]): Incident[] {
         byEpisode.set(episode, incident)
         break
       }
+      case 'AGENT_DECISION': {
+        const episode = episodeOf(e)
+        const incident = episode === undefined ? undefined : byEpisode.get(episode)
+        if (incident) incident.decision = e
+        break
+      }
       case 'AGENT_DIRECTIVE': {
         const episode = episodeOf(e)
         const incident = episode === undefined ? undefined : byEpisode.get(episode)
@@ -93,6 +101,7 @@ export function buildIncidents(events: SimEvent[]): Incident[] {
 }
 
 export const allocationOf = (i: Incident) => i.allocation?.payload as unknown as AllocationPayload | undefined
+export const decisionOf = (i: Incident) => i.decision?.payload as unknown as DecisionPayload | undefined
 export const briefingOf = (i: Incident) => i.briefing?.payload as unknown as DirectivePayload | undefined
 
 /** The zone the timeline and default selection follow: the newest incident's zone, if any. */

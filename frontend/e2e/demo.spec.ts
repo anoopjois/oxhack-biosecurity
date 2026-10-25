@@ -28,7 +28,7 @@ async function expectFitsViewport(page: Page) {
   expect(overflow).toEqual({ scroll: false, offscreen: false })
 }
 
-test('manual flow: spike, step to CRITICAL, arcs, incident card, chart, play to end, reset', async ({ page, request }, info) => {
+test('manual flow: spike, step to CRITICAL, approve the stock move, arcs, incident card, chart, play to end, reset', async ({ page, request }, info) => {
   await freshBackend(request)
   await page.goto('/')
   await expect(page.getByTestId('clock-day')).toHaveText('Day 27 of 41')
@@ -66,6 +66,26 @@ test('manual flow: spike, step to CRITICAL, arcs, incident card, chart, play to 
   await expect(page.locator('path.pin-pulse')).not.toHaveCount(0)
   await expect(page.locator('path.arc')).toHaveCount(3)
   await expect(card).toHaveAttribute('data-phase', 'critical')
+
+  // The stock move is only proposed: the clock is held until a person approves (or 30 s pass).
+  const stock = card.locator('[data-step="stock"]')
+  await expect(stock).toHaveAttribute('data-variant', 'await')
+  await expect(page.getByTestId('approval-countdown')).toContainText(/Auto-approves in \d+ s unless someone objects/)
+  await expect(page.getByTestId('donor-safety')).toContainText(/would (each )?keep \d+\.\d days of reserve after giving/)
+  await expect(page.getByTestId('clock-held')).toBeVisible()
+  await expect(page.getByTestId('step')).toBeDisabled()
+  // Fully visible, buttons included: pinned to the bottom of the incident list.
+  await expect(page.getByTestId('approval')).toBeInViewport({ ratio: 1 })
+  await expect(page.getByTestId('approve')).toBeInViewport({ ratio: 1 })
+  await page.waitForTimeout(800)
+  await expectFitsViewport(page)
+  await shot(page, info, '3a-approval')
+  await page.getByTestId('approve').click()
+  await expect(page.getByTestId('decision-tag')).toHaveText('✓ Approved by operator')
+  await expect(page.getByTestId('approval')).toBeHidden()
+  await expect(page.getByTestId('donor-safety')).toContainText(/(each keep|keeps) \d+\.\d days of reserve after giving/)
+  await expect(page.getByTestId('clock-held')).toBeHidden()
+  await expect(page.getByTestId('step')).toBeEnabled()
   for (const step of ['detected', 'stock', 'briefing', 'containment']) {
     await expect(card.locator(`[data-step="${step}"]`)).toHaveClass(/step-done/)
   }
@@ -75,6 +95,7 @@ test('manual flow: spike, step to CRITICAL, arcs, incident card, chart, play to 
   await expect(page.getByTestId('tl-alert')).toBeVisible()
   await page.waitForTimeout(2600) // arcs finish drawing, labels fade in
   await expect(page.locator('.arc-label').first()).toContainText('PPE')
+  await expect(page.locator('.arc-label').first()).toContainText(/keeps \d+\.\d days of reserve/)
   await expect(page.locator('.arc-arrow').first()).toBeVisible()
   await expect(page.locator('.zone-label-pinned[data-zone="greater-manchester"]')).toBeVisible() // survives the flight
   await expectFitsViewport(page)
@@ -82,6 +103,7 @@ test('manual flow: spike, step to CRITICAL, arcs, incident card, chart, play to 
 
   await page.getByTestId('stock-toggle').click()
   await expect(page.getByTestId('stock-table')).toContainText('Cheshire and Merseyside')
+  await expect(page.getByTestId('stock-table')).toContainText('Reserve after')
   await page.getByTestId('stock-toggle').click()
   await page.getByTestId('briefing-toggle').click()
   expect(await page.getByTestId('directive').count()).toBeGreaterThanOrEqual(3)
@@ -127,6 +149,11 @@ test('Run demo, and reloading mid-demo does not replay the arcs', async ({ page,
   await expect(page.getByTestId('zone-panel')).toContainText('Greater Manchester')
   await expect(page.locator(GM_CRITICAL)).toHaveCount(1, { timeout: 20_000 })
   await expect(page.locator('path.arc')).toHaveCount(3)
+  // Held for the approval while still in play mode; the day does not advance.
+  await expect(page.getByTestId('approval')).toBeVisible()
+  const heldDay = await page.getByTestId('clock-day').textContent()
+  await page.waitForTimeout(2500)
+  await expect(page.getByTestId('clock-day')).toHaveText(heldDay!)
   await page.locator('body').press(' ')
   await expect(page.getByTestId('play')).toBeVisible()
   await page.waitForTimeout(2600)
@@ -137,6 +164,65 @@ test('Run demo, and reloading mid-demo does not replay the arcs', async ({ page,
   await expect(page.getByTestId('incident')).toHaveAttribute('data-phase', 'critical')
   await page.waitForTimeout(2000)
   await expect(page.locator('path.arc')).toHaveCount(0)  // old allocations are history, not news
+  await expect(page.getByTestId('approval')).toBeVisible() // the pending decision survives a reload
+})
+
+test('override: nothing moves, the arcs clear and the clock runs on', async ({ page, request }, info) => {
+  await freshBackend(request)
+  await request.post('/api/v1/trigger-outbreak', { data: { zone: 'greater-manchester', r: 0.4 } })
+  const before = await (await request.get('/api/v1/inventory')).json()
+  for (let i = 0; i < 14; i++) {
+    const status = await (await request.get('/api/v1/map-status')).json()
+    if (status.clock.awaiting_approval) break
+    await request.post('/api/v1/clock/step')
+  }
+  await page.goto('/')
+  await page.getByTestId('incident').locator('button.incident-name').click()
+  await page.getByTestId('incident').locator('[data-step="stock"]').getByText('Show on map').click()
+  await expect(page.locator('path.arc')).toHaveCount(3)
+  await page.getByTestId('override').click()
+  const stock = page.getByTestId('incident').locator('[data-step="stock"]')
+  await expect(stock).toHaveAttribute('data-variant', 'overridden')
+  await expect(page.getByTestId('overridden')).toContainText('no stock moved')
+  await expect(page.locator('path.arc')).toHaveCount(0)
+  await expect(page.getByTestId('step')).toBeEnabled()
+  const after = await (await request.get('/api/v1/inventory')).json()
+  expect(after).toEqual(before)
+  await shot(page, info, '6b-overridden')
+})
+
+test('zoom buttons and dark mode', async ({ page, request }, info) => {
+  await freshBackend(request)
+  await page.goto('/')
+  await page.getByTestId('coach-dismiss').click()
+  const gm = page.locator(GM_RING)
+  const devon = page.locator('path.pin-ring[data-zone="devon"]')
+  const gap = async () => {
+    const [a, b] = [await gm.boundingBox(), await devon.boundingBox()]
+    return Math.hypot(a!.x - b!.x, a!.y - b!.y)
+  }
+  const start = await gap()
+  await page.getByTestId('zoom-in').click()
+  await expect.poll(gap).toBeGreaterThan(start * 1.5)
+  await page.getByTestId('zoom-out').click()
+  await page.getByTestId('zoom-out').click()
+  await expect.poll(gap).toBeLessThan(start * 1.01)
+  await page.getByTestId('zoom-fit').click()
+  await expect.poll(gap).toBeCloseTo(start, -1)
+
+  // Theme: auto -> light -> dark, remembered across a reload.
+  await page.getByTestId('theme').click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await page.getByTestId('theme').click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+  expect(await background()).toBe('rgb(15, 17, 21)')
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expectFitsViewport(page)
+  await shot(page, info, '10-dark')
+  await page.getByTestId('theme').click()
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.*/)
 })
 
 test('keyboard shortcuts, and none fire while using a form control', async ({ page, request }, info) => {

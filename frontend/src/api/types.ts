@@ -13,6 +13,8 @@ export interface Clock {
   at_end: boolean
   seed: number
   run: number
+  /** The clock is held until a proposed stock move is approved or overridden. */
+  awaiting_approval: boolean
 }
 
 export interface Telemetry {
@@ -41,9 +43,18 @@ export interface Zone {
   telemetry: Telemetry
 }
 
+/** A proposed stock move waiting for an operator; it auto-approves when seconds_left reaches 0. */
+export interface PendingApproval {
+  episode_id: number
+  zip_code: string
+  seconds_left: number
+  timeout_s: number
+}
+
 export interface MapStatus {
   clock: Clock
   zones: Zone[]
+  approvals: PendingApproval[]
 }
 
 export interface Stock {
@@ -61,11 +72,18 @@ export interface TransferPayload extends Stock {
   facility_id: string
   distance_km: number
   donor_after: Stock
+  /** Days of normal use the donor's stock covers before and after giving (its scarcest item). */
+  reserve_days_before: number
+  reserve_days_after: number
 }
 
+/** AGENT_ALLOCATION: the proposed stock move (it moves only once approved). */
 export interface AllocationPayload {
   episode_id: number
   target: string
+  approval: { required: boolean; timeout_s: number }
+  /** No donor can drop below this many days of reserve (its safety level). */
+  reserve_floor_days: number
   transfers: TransferPayload[]
   surge_target: Stock
   deficit: Stock
@@ -74,6 +92,19 @@ export interface AllocationPayload {
   coverage_pct: Stock
   target_before: Stock
   target_after: Stock
+}
+
+export type DecisionBy = 'operator' | 'timeout' | 'policy'
+
+/** AGENT_DECISION: what happened to a proposal. `policy` = no approval step was needed. */
+export interface DecisionPayload {
+  episode_id: number
+  decision: 'approved' | 'overridden'
+  by: DecisionBy
+  target: string
+  transfers: (Stock & { donor: string; donor_name: string; distance_km: number; donor_after: Stock; reserve_days_after: number })[]
+  target_after: Stock
+  reserve_floor_days: number
 }
 
 export type Priority = 'immediate' | '24h' | '72h'

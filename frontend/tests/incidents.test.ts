@@ -1,6 +1,6 @@
 // Layer A: incident grouping, timeline markers and map label collisions.
 import { describe, expect, it } from 'vitest'
-import { buildIncidents, focusZip, phaseOf } from '../src/lib/incidents'
+import { buildIncidents, decisionOf, focusZip, phaseOf } from '../src/lib/incidents'
 import { CITIES, cityLabelBox, visibleCities } from '../src/lib/geo'
 import { labelSide, tickDays, timelineMarkers } from '../src/lib/timeline'
 import { allocation, briefing, event } from './fixtures'
@@ -15,7 +15,20 @@ const directive = (zip: string, episode: number, source: 'template' | 'llm') =>
 const ride = (zip: string, episode: number, direction: 'disable' | 'enable') =>
   event('RIDESHARE_WEBHOOK', { episode_id: episode, direction, request: { review_at: '2026-10-09', area: { radius_km: 25 } } }, { zip_code: zip })
 
+const decide = (zip: string, episode: number, decision: 'approved' | 'overridden') =>
+  event('AGENT_DECISION', { episode_id: episode, decision, by: 'operator', target: zip, transfers: [] }, { zip_code: zip })
+
 describe('incidents', () => {
+  it('routes each approval decision to its own episode', () => {
+    const incidents = buildIncidents([
+      critical(GM, '2026-10-02'), alloc(GM, 1), critical(DV, '2026-10-02'), alloc(DV, 2),
+      decide(DV, 2, 'overridden'), decide(GM, 1, 'approved'),
+    ])
+    const byZip = new Map(incidents.map((i) => [i.zip, i]))
+    expect(decisionOf(byZip.get(GM)!)?.decision).toBe('approved')
+    expect(decisionOf(byZip.get(DV)!)?.decision).toBe('overridden')
+  })
+
   it('grows one card through injected → detected → stock → briefing → containment', () => {
     const steps = [inject(GM, '2026-09-28'), critical(GM, '2026-10-02'), alloc(GM, 1), directive(GM, 1, 'template'), ride(GM, 1, 'disable')]
     expect(phaseOf(buildIncidents(steps.slice(0, 1))[0])).toBe('watching')

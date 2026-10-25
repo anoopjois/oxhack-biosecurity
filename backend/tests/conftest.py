@@ -9,9 +9,12 @@ OUTBREAK_ZONE = "greater-manchester"
 OTHER_ZONE = "devon"
 
 
+# Most tests run with no approval step (stock moves in the tick); test_approval.py turns it on.
+
+
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(db_path=tmp_path / "test.sqlite3", seed=42)
+    return Settings(db_path=tmp_path / "test.sqlite3", seed=42, approval_timeout_s=0)
 
 
 @pytest.fixture
@@ -26,8 +29,10 @@ def make_sim(tmp_path):
     """Factory for independent Simulations, each with its own DB file."""
     sims = []
 
-    def make(seed: int = 42, name: str = "sim", writer=None, rideshare=None) -> Simulation:
-        sim = Simulation(Settings(db_path=tmp_path / f"{name}-{len(sims)}.sqlite3", seed=seed),
+    def make(seed: int = 42, name: str = "sim", writer=None, rideshare=None,
+             approval_timeout_s: float = 0) -> Simulation:
+        sim = Simulation(Settings(db_path=tmp_path / f"{name}-{len(sims)}.sqlite3", seed=seed,
+                                  approval_timeout_s=approval_timeout_s),
                          directive_writer=writer, rideshare=rideshare)
         sims.append(sim)
         return sim
