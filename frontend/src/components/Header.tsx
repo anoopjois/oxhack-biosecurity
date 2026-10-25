@@ -67,7 +67,6 @@ export function Header(p: Props) {
           <h1>BioSecure</h1>
           <p>Viral outbreak early warning</p>
         </div>
-        <span className="badge-poc" data-testid="poc-badge">PROOF OF CONCEPT</span>
       </div>
 
       <div className="when" data-testid="clock">

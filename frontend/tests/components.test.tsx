@@ -20,14 +20,14 @@ const headerProps = {
 }
 
 describe('Header', () => {
-  it('shows assessment date and PoC purpose without a day counter or simulated-data badge', () => {
+  it('shows assessment date and product purpose without badges or a day counter', () => {
     render(<Header {...headerProps} clock={clock()} />)
     expect(screen.getByText('Fri 2 Oct 2026')).toBeInTheDocument()
     expect(screen.getByTestId('clock-date')).toHaveAttribute('datetime', '2026-10-02')
     expect(screen.getByText('Viral outbreak early warning')).toBeInTheDocument()
-    expect(screen.getByTestId('poc-badge')).toHaveTextContent('PROOF OF CONCEPT')
+    expect(screen.queryByTestId('poc-badge')).not.toBeInTheDocument()
     expect(screen.queryByTestId('clock-day')).not.toBeInTheDocument()
-    expect(screen.queryByText(/simulated data|day \d+ of/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/proof of concept|simulated data|day \d+ of/i)).not.toBeInTheDocument()
     expect(document.querySelectorAll('.btn-primary')).toHaveLength(1)
   })
   it('does not hold the clock for a notification approval', () => {

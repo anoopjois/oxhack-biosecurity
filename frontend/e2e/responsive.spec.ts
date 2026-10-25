@@ -245,12 +245,21 @@ test('opening another header panel closes the previous panel', async ({ page }) 
   await expect(page.getByRole('menu')).toBeHidden()
 })
 
-test('PoC dashboard explains viral outbreak risk and its inputs without simulation counters', async ({ page }, info) => {
+test('dashboard explains viral outbreak risk and its inputs without badges or simulation counters', async ({ page }, info) => {
   await mockSimulation(page, clock({ day: 33, sim_date: '2026-10-04' }), incidents)
-  await expect(page.getByTestId('poc-badge')).toHaveText('PROOF OF CONCEPT')
+  await expect(page.getByTestId('poc-badge')).toHaveCount(0)
   await expect(page.getByText('Viral outbreak early warning', { exact: true })).toBeVisible()
+  for (const width of [320, 1280]) {
+    await page.setViewportSize({ width, height: 720 })
+    const brand = await page.locator('.brand-title').evaluate((element) => {
+      const title = element.querySelector('h1')!.getBoundingClientRect()
+      const purpose = element.querySelector('p')!.getBoundingClientRect()
+      return { beside: purpose.left >= title.right, overlappingRows: purpose.top < title.bottom && purpose.bottom > title.top }
+    })
+    expect(brand.beside && brand.overlappingRows).toBe(true)
+  }
   await expect(page.getByTestId('clock-date')).toHaveAttribute('datetime', '2026-10-04')
-  await expect(page.locator('body')).not.toContainText(/synthetic|simulated data|day \d+ of \d+/i)
+  await expect(page.locator('body')).not.toContainText(/proof of concept|synthetic|simulated data|day \d+ of \d+/i)
   const explanation = page.getByTestId('risk-explanation')
   await expect(explanation).toContainText('Wastewater viral load50%')
   await expect(explanation).toContainText('A&E waiting-time pressure35%')

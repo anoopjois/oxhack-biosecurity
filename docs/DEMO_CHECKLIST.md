@@ -9,9 +9,9 @@ See the [setup instructions](../README.md) and [talk track](DEMO_SCRIPT.md).
   `ALERT_RECIPIENT` in the local `.env`. The current test recipient is
   `daeyad1@gmail.com`, not an official authority.
 - Gmail needs an app password, not the normal account password.
-- Start both servers, open http://localhost:5173 and verify the **Proof of concept**
-  badge and **Viral outbreak early warning** heading. The header shows an assessment
-  date, not a day counter.
+- Start both servers, open http://localhost:5173 and verify **Viral outbreak early
+  warning** appears beside **BioSecure**, with no proof-of-concept badge. The header
+  shows an assessment date, not a day counter.
 - Optionally run the manual Gemini PDF smoke command from the README. It never emails.
 - A real end-to-end send is a separate operator action: only click **Approve & send
   report** if you intend to email the configured recipient.
