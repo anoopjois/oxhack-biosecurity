@@ -26,7 +26,8 @@ def context(make_sim):
 def settings():
     return DeliverySettings(api_key="secret-key", model="gemini-3.8-flash",
                             smtp_username="sender@example.com", smtp_password="app-password",
-                            smtp_from="sender@example.com", recipient="test@example.com")
+                            smtp_from="sender@example.com", recipient="test@example.com",
+                            timeout_s=600)
 
 
 def response(text, finish="STOP"):
@@ -41,6 +42,7 @@ def test_gemini_structured_request_and_professional_pdf(context, monkeypatch):
     pdf = ReportService(settings()).generate(context)
     kwargs = post.call_args.kwargs
     assert kwargs["headers"] == {"x-goog-api-key": "secret-key"}
+    assert kwargs["timeout"] == 600
     assert kwargs["json"]["generationConfig"]["responseMimeType"] == "application/json"
     assert "responseJsonSchema" in kwargs["json"]["generationConfig"]
     submitted = json.loads(kwargs["json"]["contents"][0]["parts"][0]["text"])
@@ -111,10 +113,11 @@ def test_gemini_network_failure(context, monkeypatch):
     assert "secret-key" not in str(error.value)
 
 @pytest.mark.parametrize("failure", [httpx.ConnectTimeout, httpx.ReadTimeout])
-def test_gemini_timeouts_explain_the_configured_limit(context, monkeypatch, failure):
+@pytest.mark.parametrize("timeout_s", [90, 600])
+def test_gemini_timeouts_explain_the_configured_limit(context, monkeypatch, failure, timeout_s):
     monkeypatch.setattr(reporting.httpx, "post", MagicMock(side_effect=failure("secret-key")))
-    with pytest.raises(ReportError, match="timed out after 90 seconds") as error:
-        ReportService(replace(settings(), timeout_s=90)).generate(context)
+    with pytest.raises(ReportError, match=f"timed out after {timeout_s} seconds") as error:
+        ReportService(replace(settings(), timeout_s=timeout_s)).generate(context)
     assert "REPORT_TIMEOUT_S" in str(error.value)
     assert "secret-key" not in str(error.value)
 
