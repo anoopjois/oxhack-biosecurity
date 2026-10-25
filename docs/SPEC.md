@@ -1,148 +1,262 @@
-1. Biosecurity Micro-Triage & Logistics Autobalancer 
+# BioSecure: current system design and API
 
-The 2026 Context: With active multi-country viral outbreaks (like the late-2026 Ebola resurgence in central Africa) and the constant threat of novel pathogens, traditional supply chain responses are too slow, often resulting in medical hoarding in safe zones and shortages in hot zones.
-The Prediction: Ingest local mobility data (cell tower density, transit tap-ins), municipal wastewater pathogen metrics, and NLP analysis of local emergency room wait times to predict micro-outbreak expansion zones 48–72 hours before clinical testing confirms a spike.
-The Decision: The agent integrates directly with hospital and pharmacy ERP (Enterprise Resource Planning) systems. When a zip code crosses the critical threshold, it autonomously executes inventory transfers—re-routing PPE, antivirals, or vaccines from predicted safe zones to the predicted hot zone. Simultaneously, it sends API calls to ride-share platforms to temporarily disable "pooled" rides in the affected perimeter.
-Data Sources: Biobot Analytics (wastewater APIs), Google/Apple mobility data, and mock hospital ERP inventory databases.
+This is the specification of the **implemented viral-outbreak early-warning and
+approved-reporting system**. It replaces the original logistics/autobalancer pitch.
+The original proposal remains in Git history, not as the current product contract.
 
-Yes, this project is completely buildable in a 25-hour hackathon, provided you scope it aggressively as a proof-of-concept / functional prototype rather than a production-ready medical platform.
-In a hackathon setting, the biggest traps are trying to integrate real enterprise systems (like actual hospital SAP/Epic ERPs or live municipal wastewater pipelines) or getting bogged down building a complex front-end. If you lean into mock data, modular API services, and a killer system architecture presentation, you can have a working end-to-end demo.
-Here is a breakdown of why it works, the core architecture to build, and a strict 25-hour execution blueprint to win.
-Why It’s Feasible (and High-Impact)
-The Core Logic is Just a Scoring Algorithm: You don't need machine learning trained on terabytes of real-time data to win a hackathon. A weighted risk-scoring formula combining wastewater viral load + mobility drop/spike + ER wait-time spikes will easily simulate the predictive layer.
-APIs Keep It Lightweight: You can mock the Biobot Analytics API and mobility data with simple JSON files or synthetic Python data generators.
-The "Demo Factor" is Massive: Judges love agents that take autonomous real-world actions (e.g., triggering a simulated logistics reroute or showing a live map of inventory shifting from a safe zone to a hot zone).
-The 25-Hour Hackathon Execution Blueprint
-Phase 1: Scope & Architecture (Hours 0–3)
-Do not write code yet. Define the MVP.
-Frontend: A single-page dashboard (Next.js or Streamlit) showing a city map (e.g., Leaflet.js or Mapbox) with zip codes color-coded by risk level, plus a live event log showing the agent's autonomous decisions.
-Backend: Python (FastAPI or Flask) acting as the orchestration agent.
-Database: SQLite or simple in-memory JSON to track mock hospital/pharmacy inventory levels across different zip codes.
-Phase 2: Data Simulation & Ingestion (Hours 3–8)
-Since real-time wastewater and mobility APIs won't be accessible or populated for your exact demo scenario within 24 hours, build a synthetic data generator script:
-Wastewater (Biobot Mock): JSON payload returning viral copies/mL for 5 specific zip codes over the last 7 days. Make one zip code spike exponentially.
-Mobility Mock: JSON payload showing percentage changes in transit tap-ins or cell density.
-ER Wait Times Mock: Simple integers representing average wait times (e.g., Zone A: 45 mins, Zone B: 3 hours).
-Phase 3: The Triage & Prediction Engine (Hours 8–14)
-Build a simple scoring function in Python that runs every few seconds or on a button click:
+See [setup and stack](../README.md), [maths](MATHS.md), [demo checklist](DEMO_CHECKLIST.md)
+and [presentation script](DEMO_SCRIPT.md).
 
+## Purpose and boundaries
 
-RiskScore=(w1WastewaterLoad)+(w2ERWaitTimeDelta)-(w3MobilityOutflow)
-When a zip code’s score crosses a defined threshold (>85), it triggers an Autobalancer Event.
-Phase 4: Autonomous Action & ERP/API Integration (Hours 14–20)
-Inventory Rerouting: Write an endpoint that queries your mock hospital ERP database, finds a neighboring zip code with surplus PPE/antivirals, and moves inventory records from Warehouse A to Warehouse B.
-Ride-Share API Mock: Simulate an API call to a rideshare service (like Uber/Lyft developer APIs, or just a mock webhook logger) that prints: [API MOCK] Disabling pooled rides in Zip Code 90210 due to biosecurity containment protocol.
-Display these actions in real-time on your dashboard event log.
-Phase 5: Polish, Deck, & Demo Prep (Hours 20–25)
-The "Magic Button": Add a button on the UI that lets judges manually inject a "spike" into a clean zip code so they can watch the agent instantly recalculate risk, shift inventory, and log the decision live.
-Slide Deck: Focus on the 2026 Context (Ebola/novel pathogen resurgence), the systemic failure of reactive supply chains, and how proactive micro-triage saves lives and prevents panic hoarding.
-Pro-Tips to Win
-Don't touch real medical or enterprise software: Emphasize that your mock ERP schema mirrors HL7/FHIR standards or standard medical supply schemas.
-Focus on the "Autonomous Agent" narrative: Judges want to see an agent that acts without human bottlenecking. Highlight the automated decision loop: Detect  Predict  Transfer  Contain.
+BioSecure combines three area-level signals to identify unusual conditions and
+project a risk index 48 hours ahead. Its users can inspect evidence, review a critical
+incident and explicitly approve a situation report for the affected ICB.
 
+All telemetry is synthetic. There is no live NHS, wastewater-laboratory, mobile-network
+or hospital-system integration. An alert is a statistical early warning, not a
+confirmed outbreak, pathogen identification, infection probability or clinical order.
+The application does not automatically notify authorities or execute containment.
 
-TECHNICAL SPECIFICATION 
-1. System Architecture & Component Interaction
-The architecture consists of five core layers:
-[ Data Ingestion & Telemetry Simulator ]
-                  │
-                  ▼
-   [ Fast In-Memory State / Database ] (SQLite / Redis)
-                  │
-                  ▼
-       [ Predictive Risk Engine ] (Rolling Window Math Engine)
-                  │
-                  ▼
-  [ LLM Orchestration & Reasoning Layer ] (Gemini 1.5)
-                  │
-                  ▼
-     [ Logistics & Dispatch Executor ] ──► [ Real-Time Dashboard UI ]
+## Architecture
 
-Data Ingestion & Simulation Layer: Ingests three distinct time-series telemetry streams (wastewater viral copy counts, emergency room wait times, and mobile/cell-density transit indicators).
-State & Persistence Layer: Stores regional metadata, historical 14-day telemetry logs, and current hospital inventory stocks.
-Predictive Risk Engine: Continuously runs a rolling mathematical formula over incoming telemetry to calculate a normalized risk score (0.0--100.0) for every monitored zone.
-LLM Orchestration Layer: Triggers when a zone breaches the risk threshold (80.0). Passes regional inventory data and risk velocity metrics to the model to generate a structured decision directive.
-Logistics & Dispatch Executor: Receives the decision directive, updates inventory balances across facilities, and logs compliance and containment events.
-2. Data Schemas (Entities & Attributes)
-A. Regional Metadata (zip_codes)
-zip_code (Primary Key, String): Unique geographical postal code identifier.
-zone_name (String): Human-readable region or neighborhood name.
-latitude / longitude (Floats): Spatial coordinates for map plotting.
-population (Integer): Total resident population density base.
-B. Health & Mobility Telemetry Logs (telemetry_logs)
-log_id (Primary Key, Integer): Sequential log entry ID.
-timestamp (DateTime): Time of telemetry recording.
-zip_code (Foreign Key, String): Linked region.
-wastewater_copies_per_l (Float): Pathogen viral genome copies per liter (Biobot-style metric).
-er_avg_wait_mins (Float): Rolling average emergency room wait time in minutes.
-mobility_density_score (Float): Relative transit/cell-tower crowd density index (0.0--100.0).
-C. Medical Inventory & Facilities (hospital_inventories)
-facility_id (Primary Key, String): Facility identifier (FHIR/HL7 style).
-zip_code (Foreign Key, String): Location zone.
-facility_name (String): Name of hospital or supply hub.
-ppe_units (Integer): Available protective equipment inventory.
-antiviral_doses (Integer): Stock of therapeutic antiviral doses.
-vaccine_doses (Integer): Available prophylactic vaccine units.
-3. Mathematical Risk-Scoring Engine
-The core predictive metric evaluates rolling 3-day trajectories (t=3days) across normalized health and mobility signals:
+| Component | Responsibility | Key source |
+|---|---|---|
+| Engine | Seeded telemetry, preprocessing, score, OLS growth fit, forecast, status replay | [engine/](../engine/) |
+| Simulation | In-memory timeline, observed-day ingestion, clock, actions and snapshots | [simulation.py](../backend/simulation.py) |
+| API | Async FastAPI routes, validation and error mapping | [main.py](../backend/main.py), [schemas.py](../backend/schemas.py) |
+| Persistence | SQLite schema, WAL connections, events, episodes and saved PDFs | [db.py](../backend/db.py) |
+| Incident worker | CRITICAL-entry summaries, approvals' background execution and error states | [executor.py](../backend/agent/executor.py) |
+| Reporting | Gemini REST, Pydantic assessment validation, ReportLab, TLS SMTP | [reporting.py](../backend/agent/reporting.py) |
+| Dashboard | React/TypeScript, Leaflet, SVG charts, polling, approvals | [App.tsx](../frontend/src/App.tsx) |
 
-RiskScore(z)=w1Wt+w2Et+w3Mdensity
-Parameter Weights & Normalization
-W (Wastewater Velocity): Percentage change in viral genome copies per liter relative to the baseline 3 days prior. Weight: w1=0.50
-E (ER Wait Time Velocity): Absolute delta in average emergency room wait times in minutes over 3 days. Weight: w2=0.35
-Mdensity (Mobility Index): Normalized 0.0--1.0 value representing transit tap-ins and cell-tower density. Weight: w3=0.15
-Output Bounds: Score is strictly clamped between 0.0 (Safe) and 100.0 (Critical Outbreak Hotspot).
-4. Operational Workflow & Decision Protocol
-Continuous Monitoring: Telemetry logs stream into the backend. The mathematical engine recalculates the composite Risk Score every minute.
-Threshold Breach: When a zip code's Risk Score reaches or exceeds 80.0, the system flags the zone as CRITICAL.
-Context Assembly: The backend queries nearby zip codes (donor zones with Risk Scores <40.0) and gathers current medical inventory levels.
-Agent Reasoning: The prompt engine passes this context to Gemini 1.5. The model evaluates supply deficits and emits a structured decision object containing:
-Target Outbreak Zone: Zone requiring immediate reinforcement.
-Donor Facility: Recommended donor site with surplus supplies.
-Transfer Allocation: Specific quantity of PPE, antivirals, or vaccines to move.
-Containment Directives: Suggested non-pharmaceutical interventions (e.g., suspending rideshare pooling in the perimeter).
-Execution & Inventory Shift: The executor mutates the inventory balances (subtracts from donor, adds to recipient) and broadcasts the event log to the frontend.
-5. System Interface & API Contract Specification
-Endpoint A: Map & Zone Status (GET /api/v1/map-status)
-Purpose: Serves real-time spatial state to the dashboard map.
-Payload Contents: Array of zones containing coordinates, latest telemetry metrics, computed risk scores, and current status flags (SAFE, ELEVATED, CRITICAL).
-Endpoint B: Outbreak Injection / Simulation (POST /api/v1/trigger-outbreak)
-Purpose: Simulation hook for demonstration.
-Payload Contents: Target zip_code, wastewater viral multiplier (e.g., 4.5), and ER wait time add-on minutes.
-Endpoint C: Autobalance Execution (POST /api/v1/execute-autobalance)
-Purpose: Applies the LLM recommendation to the database state.
-Payload Contents: Donor facility ID, target facility ID, transferred item counts, and containment directive text.
-6. Frontend Dashboard Visual Layout
-Header Controls: Application title, status indicator, and prominent "Simulate Pathogen Spike" trigger button.
-Primary View (Map Canvas): Spatial map rendering monitored zones as color-coded pins/polygons based on live risk scores (Green 40, Yellow 41--79, Red 80).
-Side Panel (Event Stream & Directives): Live scrolling event feed showing real-time alerts and structured decision logs generated by the agent.
-Bottom Panel (Inventory Metrics): Comparative bar charts showing real-time inventory balances across facilities before and after automated reallocations.
+There is no detector training pipeline. Gemini writes explanatory prose only;
+the Python engine calculates all scores, forecasts and status thresholds.
 
+### Data flow per simulated day
 
+1. The full seeded timeline exists only in simulation memory, including future days.
+2. A tick inserts the next day's telemetry into SQLite.
+3. The engine reads the observed SQLite data and scores as of the new day.
+4. Status changes become `STATUS_CHANGE` events. Each entry into CRITICAL opens an
+   incident with a deterministic short summary and detection-time context.
+5. Status writes, incident creation and the logged step commit in the tick transaction.
+6. A read snapshot is rebuilt. Transition listeners run after commit, outside the lock.
+7. The dashboard fetches map status and incremental events.
 
+A single `threading.Lock` guards simulation state mutations. SQLite WAL lets separate
+read connections see committed data rather than partially written ticks. Clock steps
+and expensive route work run through `asyncio.to_thread`; reports use a separate
+thread pool and do not block the clock.
 
-NHS England Regions
-England has 36 Integrated Care Boards from 1 April 2026, across seven NHS regions.
-Source: [ONS April 2026 names and codes](https://geoportal.statistics.gov.uk/datasets/integrated-care-boards-april-2026-names-and-codes-in-en/explore).
-The current demo roster and approximate metadata are in [engine/zones.csv](../engine/zones.csv).
-North East and Yorkshire (4 ICBs)
-Sub-areas: North East and North Cumbria; Humber and North Yorkshire; South Yorkshire; West Yorkshire.
-North West (3 ICBs)
-Sub-areas: Cheshire and Merseyside; Greater Manchester; Lancashire and South Cumbria.
-Midlands (11 ICBs)
-Sub-areas: Birmingham and Solihull; Black Country; Coventry and Warwickshire; Derby and Derbyshire; Herefordshire and Worcestershire; Leicester, Leicestershire and Rutland; Lincolnshire; Northamptonshire; Nottingham and Nottinghamshire; Shropshire, Telford and Wrekin; Staffordshire and Stoke-on-Trent.
-East of England (3 ICBs)
-Sub-areas: Central East; Essex; Norfolk and Suffolk.
-London (4 ICBs)
-Sub-areas: West and North London; North East London; South East London; South West London.
-South East (4 ICBs)
-Sub-areas: Thames Valley; Hampshire and Isle of Wight; Kent and Medway; Surrey and Sussex.
-South West (7 ICBs)
-Sub-areas: Bath and North East Somerset, Swindon and Wiltshire; Bristol, North Somerset and South Gloucestershire; Cornwall and the Isles of Scilly; Devon; Dorset; Gloucestershire; Somerset.
+## Signals, outputs and dashboard meaning
 
-NHS Scotland
-Managed through 14 regional NHS Health Boards (such as NHS Greater Glasgow and Clyde, NHS Lothian, NHS Grampian) alongside 31 Health and Social Care Integration Partnerships. [1]
+Telemetry is one daily row per zone:
 
-NHS Wales
-Managed through 7 Local Health Boards (such as Cardiff and Vale, Swansea Bay, Betsi Cadwaladr) alongside NHS Wales Collaborative agencies. [1, 2]
+| Field | Units / meaning |
+|---|---|
+| `wastewater_copies_per_l` | Generated viral copies per litre |
+| `er_avg_wait_mins` | Generated mean A&E waiting time in minutes; a nonspecific pressure proxy |
+| `mobility_density_score` | Generated 0-100 crowding/mixing index, constant per zone in this model |
 
+`zip_code` is retained as the schema key but holds an **ICB slug**, such as
+`greater-manchester`, not a postal code.
+
+The dashboard shows:
+
+- **Outbreak risk now**: the current 0-100 index.
+- **Outbreak risk in 48h**: the same index projected two days ahead.
+- **Viral doubling time**: estimated doubling of wastewater viral levels, not cases.
+  Nonpositive growth reads "Not rising"; unavailable estimates show a dash.
+- **England overview**: coverage and factor weights (50% / 35% / 15%).
+- **Selected area**: latest factor readings, wastewater/A&E baseline signal levels,
+  A&E usual wait, mobility index and each factor's score points. Mobility is not
+  baseline-normalised. Displayed integer contributions use largest-remainder rounding
+  so they sum to the displayed integer total.
+- **History**: solid current risk, dashed 48-hour forecast, injected-surge/alert/crossing
+  markers and an observed lead-time caption. A crossing is recorded only once observed.
+- **Incident cards**: separate episodes with summary, intended ICB, delivery address,
+  approval/dismissal, delivery progress, visible failures and PDF download.
+
+Normal is the UI label for API status `SAFE`. Elevated uses current score > 40.
+Critical entry needs projected score >= 80 and `r_hat - 2 * se_r > 0`.
+Critical holds until current score < 70 and entry no longer holds.
+Missing usable data can produce `INSUFFICIENT_DATA`; see [the detailed rules](MATHS.md#5-alert-status-and-baseline-freezing).
+
+### Map, controls and refresh
+
+The default map uses bundled Natural Earth vector outlines and city labels, so it
+does not need a tile service. Optional greyscale OpenStreetMap tiles use integer
+zoom levels to avoid seams, falling back to the vector map if loading fails.
+Pins share one size; status, selection rings and critical pulses distinguish areas.
+There are no stock-transfer arcs or donor camera flights.
+
+Controls include play/pause, step, speed, reset, Simulate spike, Run demo, theme,
+help and an optional raw event log. Space, right arrow, R, S and ? are shortcuts,
+disabled while typing. There is no first-load welcome popup.
+
+[useSimulation](../frontend/src/state/useSimulation.ts) polls map status and
+`events?since_id=...` every second while playing, awaiting approval or processing a
+report, and every three seconds otherwise. It refreshes after actions, avoids
+overlapping polls and pauses polling in hidden tabs. `clock.run` changes clear run
+caches. Incidents are grouped by zone and episode so concurrent outbreaks do not mix.
+
+## Clock and reproducibility
+
+Defaults are 28 historical days plus 14 future days. Days are indexed 0-41:
+the initial date is 1 September 2026, and the clock starts on day 27, 28 September.
+The dashboard presents assessment dates rather than a "Day X of 41" counter.
+Each tick advances one simulated day; the final day automatically pauses play.
+
+Run demo resets, injects Greater Manchester at `r = 0.4/day` on the current day,
+and plays at one second per day. Reset without a seed retains the current seed.
+A custom reset can supply another seed.
+
+### Invariants
+
+- **Observed past is immutable.** Injection starts on the current day with multiplier
+  exactly 1, changing only later days. Ingested rows are not rewritten.
+- **No look-ahead.** Future telemetry and injection ground truth are not used to
+  calculate the observed score or passed to Gemini.
+- **Replayable simulation.** Seed plus the ordered reset/step/trigger/decision log
+  reproduces deterministic state. Clock ticks are logged as steps. Replay disables
+  external report dispatch; asynchronous report events and wall-clock timestamps
+  are outside deterministic comparisons.
+- **One incident per entry.** `agent_episodes.status_event_id` is UNIQUE. A later
+  CRITICAL entry can create a separate episode.
+
+Multiple different zones may have injected outbreaks. The API permits only one
+injected outbreak per zone per run; a second returns 409, even if its alert has closed.
+
+### Persistence is deliberately demo-scoped
+
+SQLite stores zones, observed telemetry, latest status, events, episodes, PDF bytes
+and the action log. `hospital_inventories` and `transfers` remain for compatibility;
+stock is seeded on reset and never transferred by the current workflow.
+
+Browser reload preserves the current database state. Backend startup and run reset
+clear per-run data and reports; startup also reloads the CSV roster. A schema-version
+mismatch rebuilds demo tables rather than migrating production records.
+This is not a durable surveillance archive.
+
+## Approved report lifecycle
+
+On CRITICAL entry, the application captures the area's observed metrics, date,
+metadata, summary and current configured recipient. There is **no approval deadline
+and no automatic approval**.
+
+| State | Meaning |
+|---|---|
+| `awaiting_approval` | Operator has not decided |
+| `rejected` | Operator dismissed; no report dispatch |
+| `queued` | Explicit approval or retry has queued work |
+| `generating` | Background worker validates configuration and generates/reuses the PDF |
+| `sending` | PDF saved; SMTP submission begins |
+| `sent` | SMTP server accepted the message, not proof of inbox arrival |
+| `failed` | Definite configuration, generation or submission failure; explicit retry allowed |
+| `delivery_unknown` | Submission may have succeeded; retry disabled to avoid duplicates |
+
+The report process:
+
+1. Validate Gemini credentials, one sender/recipient address, port and TLS mode.
+2. Send the detection-time context to Gemini's `generateContent` REST endpoint.
+3. Require a completed structured JSON response with `executive_summary`, `assessment`,
+   `recommended_actions` and `limitations`. Unknown fields are forbidden.
+4. Enforce nonempty bounded strings, three or four actions and a combined narrative
+   limit of 350 whitespace-delimited words. Proposed owners/timeframes are prompt
+   requirements, not separately machine-validated clinical facts.
+5. Render a PDF with deterministic evidence table, AI prose, model, intended ICB,
+   configured delivery address, limitations and exercise labels.
+6. Save the PDF and submit one attachment via TLS SMTP.
+
+The prompt requests signal verification, liaison by the ICB with UKHSA/local public
+health, and provider readiness review, each with a team, timeframe and concrete output.
+It forbids invented measurements, diagnoses, contacts and claims that action occurred.
+**There is no general numeric-fact checker or clinical validation of generated prose.**
+The evidence table comes from stored data; the narrative still needs human judgement.
+
+Approval is permission to generate **and email**; it is not a final-text preview.
+Retries reuse a saved PDF instead of calling Gemini again. Errors are visible and
+provider/SMTP secrets are not included in operator-facing failures.
+
+A generation counter rejects stale worker progress after reset. Once sending begins,
+a message can still be submitted; reset cannot recall it. There is no durable job queue
+or end-to-end exactly-once email guarantee.
+
+### Authority versus actual recipient
+
+The affected NHS ICB is the **intended authority** for NHS preparedness review.
+UKHSA Health Protection Teams and local authority public health are relevant partners
+for outbreak assessment and response:
+[UKHSA guidance](https://www.gov.uk/health-protection-team) and
+[NHS England ICB guidance](https://www.england.nhs.uk/publication/clinical-response-to-local-incidents-and-outbreaks-of-infectious-disease-commissioning-guidance-for-icbs/).
+
+The application does not look up contacts or route by ICB. It emails **only the one
+configured `ALERT_RECIPIENT`**, captured when each incident opens. The UI says
+"Delivery address"; PDFs/emails explicitly retain exercise and test-delivery wording.
+No additional authority, UKHSA team or council is notified automatically.
+Only use an authorised recipient, especially if configuring an NHS address.
+
+## API reference
+
+All paths are prefixed with `/api/v1`. Live request/response schemas are exposed at
+FastAPI's `/docs`; source models are in [schemas.py](../backend/schemas.py).
+
+| Method | Path | Body / purpose |
+|---|---|---|
+| GET | `/health` | Health and roster count |
+| GET | `/map-status` | Clock, current zones with telemetry/contributions, pending approvals |
+| GET | `/events` | `since_id` (exclusive), `limit`, optional comma-separated `types`; returns `events`, `last_id` |
+| GET | `/zones/{zip_code}/history` | Observed daily status/current/projected scores |
+| GET | `/inventory` | Compatibility endpoint; seeded current/initial facility stock |
+| POST | `/trigger-outbreak` | `{"zone":"greater-manchester","r":0.4}` |
+| POST | `/clock/play` | Optional `{"seconds_per_day":1.0}` |
+| POST | `/clock/pause` | No body |
+| POST | `/clock/step` | No body; advance one day |
+| POST | `/clock/reset` | Optional `{"seed":42}` |
+| POST | `/episodes/{episode_id}/approve` | Approve generation and email |
+| POST | `/episodes/{episode_id}/override` | Dismiss without sending |
+| POST | `/episodes/{episode_id}/retry` | Retry only a definitively failed approved report |
+| GET | `/episodes/{episode_id}/report.pdf` | Download saved PDF; unavailable before generation |
+
+Simulation errors map to 404 for unknown zones/episodes, 409 for conflicting state,
+and 422 for invalid inputs. Outbreak `r` is constrained to 0.05-1.0/day; speed to
+0.25-10.0 seconds/day. FastAPI also validates request structure.
+
+Principal event types are `OUTBREAK_INJECTED`, `STATUS_CHANGE`, `INCIDENT_OPENED`,
+`INCIDENT_DECISION`, `REPORT_STATUS` and `TIMELINE_END`. There are no active allocation,
+rideshare or briefing events.
+
+## ICB coverage
+
+[zones.csv](../engine/zones.csv) follows England's 36 ICBs effective **1 April 2026**.
+Display names omit the common NHS prefix and Integrated Care Board suffix.
+Zone count always comes from the file. Sources:
+[ONS register](https://geoportal.statistics.gov.uk/datasets/integrated-care-boards-april-2026-names-and-codes-in-en/explore)
+and [NHS ODS merger summary](https://digital.nhs.uk/services/organisation-data-service/upcoming-code-changes/icb-mergers-2026-change-summary).
+
+| Successor ICB | Former areas represented |
+|---|---|
+| Central East | Bedfordshire, Luton and Milton Keynes; Cambridgeshire and Peterborough; Hertfordshire excluding West Essex |
+| Essex | Mid and South Essex; West Essex; North East Essex |
+| Norfolk and Suffolk | Norfolk and Waveney; Suffolk excluding North East Essex |
+| West and North London | North West London; North Central London |
+| Thames Valley | Buckinghamshire, Oxfordshire and Berkshire West; East Berkshire from Frimley |
+| Surrey and Sussex | Surrey Heartlands; Sussex; Surrey parts of Frimley |
+
+Hampshire and Isle of Wight also incorporates former Frimley areas in Hampshire.
+Coordinates are representative pins, not boundary polygons. Population values are
+rounded sizing estimates; split areas are apportioned without double counting.
+The approximate total of 58,300,000 is preserved from the earlier demo, not an official
+2026 population estimate.
+
+Changing roster order/count changes seeded draws. Historical 42-zone results and old
+screenshots must not be presented as current 36-ICB validation.
+
+## Deployment constraints
+
+Use one backend process/worker locally. Multiple workers would each initialise a
+clock and reset the shared database; horizontal scaling is not implemented.
+There is no authentication or authorisation boundary on "operator" actions.
+Public exposure, live data ingestion or real-authority alerts require a separate
+production design, validated models/data, governance, access controls and delivery auditing.

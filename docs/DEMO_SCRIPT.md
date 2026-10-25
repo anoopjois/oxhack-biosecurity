@@ -1,73 +1,107 @@
-# Demo script: early warning to approved report
+# Demo script: viral outbreak early warning
 
-Use the [checklist](DEMO_CHECKLIST.md) first. All data and alerts are synthetic.
+Use the [checklist](DEMO_CHECKLIST.md) first. This is a synthetic-data demonstration.
+Keep [the maths and limitations](MATHS.md) available for questions.
 
-## 0:00 - The problem
+## Opening: what problem does it address?
 
-"We monitor synthetic wastewater and A&E signals across England's health areas.
-Wastewater can show a rise before hospital pressure becomes obvious. We forecast
-risk 48 hours ahead so an operator can review a developing incident early."
+> BioSecure brings together wastewater viral levels, A&E pressure and mobility to
+> highlight developing viral-outbreak risk across England's 36 NHS ICBs. It projects
+> a risk index 48 hours ahead so a person can review the evidence and prepare earlier.
+> Today's demonstration uses generated data, not a live NHS surveillance feed.
 
-Point to **Viral outbreak early warning** beside the **BioSecure logo**. Explain
-that this presentation uses generated data, then click **Run demo**. The dashboard
-shows assessment dates rather than simulation day counters.
+Point to **Viral outbreak early warning** beside the logo and the coverage count.
+Show the overview weights: wastewater 50%, A&E 35%, mobility/crowding 15%.
+Explain that an index out of 100 is not an infection probability or confirmed cases.
 
-## 0:30 - Detection
+## Start the run and inspect an area
 
-Greater Manchester turns amber and then red around day 31. Pause if useful.
+Click **Run demo**, then pause if useful. This resets the run, injects Greater
+Manchester at `r=0.4/day` and starts one simulated day per second.
 
-"Today's risk is about 55, while the forecast is about 82. The alert also requires
-statistically significant positive growth; it is not just a noisy high measurement.
-The system sees only the telemetry observed so far, not our injected ground truth."
+> In a selected area we can inspect the actual factor readings and how many score
+> points each contributes. Wastewater and A&E are compared with the area's recent
+> baseline. Mobility is a stable crowding index in this model, not a changing feed.
 
-Point to the zone chart and the incident's short summary. No incident card is shown
-before detection. The synthetic spike remains only a demo control/chart marker.
+Show the current and 48-hour forecast lines and the wastewater doubling estimate.
+Clarify that doubling describes the wastewater signal, not patient numbers.
+The injected-surge marker is presenter ground truth, not detector knowledge.
 
-"These are viral outbreak risk indices out of 100, not infection probabilities or
-confirmed cases. The inputs are wastewater viral load (50%), A&E waiting-time
-pressure (35%), and mobility/crowding (15%). Viral doubling time describes the
-wastewater signal, not the number of patients."
+## Detection
 
-## 1:00 - Human-approved notification
+With default seed 42, start date and roster, Greater Manchester becomes critical
+on **2 October 2026**, index 31. Pause to discuss the incident.
 
-"Here is the incident summary and the configured test recipient. Nothing goes out
-automatically. Approval authorises Gemini to write a professional report, which we
-render as a PDF and email. Dismiss sends nothing. The simulation keeps running while
-the operator decides."
+> Current risk is about 55 while the forecast is about 82. The alert also needs
+> positive growth beyond two fitted standard errors. The detector uses only the
+> telemetry observed so far, not our injected outbreak labels or future rows.
 
-Only if an actual test email is intended, click **Approve & send report**.
+Point to the incident summary. Explain Normal/Elevated/Critical and that amber
+means monitor unusual signals, not "confirmed outbreak". No incident card opens
+merely because the presenter injected a spike.
 
-"Gemini writes the assessment; the evidence table comes directly from the observed
-data. The PDF separates facts from AI interpretation and prominently says this is
-an exercise. Approval happens before generation, so this is not an operator-reviewed
-version of the final AI prose."
+## Human-approved ICB situation report
 
-Show queued, generating, sending and acceptance status, then download the PDF.
-Explain that SMTP acceptance does not guarantee arrival; verify the recipient inbox.
-There are no stock transfers or operational containment actions.
+Show **Intended authority**, **Delivery address**, **Approve & send report** and
+**Dismiss**.
 
-## 2:00 - Lead time and limitations
+> The affected ICB is the intended audience for NHS preparedness. UKHSA and local
+> public health would be partners in outbreak assessment. This demonstrator sends
+> only to the delivery address shown; it does not look up or notify those teams.
+> Nothing is emailed automatically, and pending approval does not stop the clock.
 
-Step to day 34 (5 October) and point to the lead caption.
+**Default to Dismiss unless an authorised recipient and an actual send are agreed.**
+If demonstrating delivery, approve only with the operator's intention to make a
+paid Gemini request and send the email.
 
-"In this seeded example the alert arrived three days before current risk reached 80.
-The engine's multi-seed validation is documented in the maths notes. This is a
-synthetic statistical demo, not a clinical diagnosis or identification of a pathogen."
+> Approval asks Gemini for a concise situation report and authorises email dispatch.
+> The measured evidence table is rendered from stored data. Gemini adds an advisory
+> assessment and three or four proposed next steps, within a 350-word narrative:
+> who should verify signals, liaise with public health and review NHS readiness.
 
-"With the current 36-area roster, the clean-data check found one false critical
-zone-day in 165,600 zone-days. The strict zero-false-alert requirement therefore
-does not pass; we have not tuned thresholds to hide it."
+Explain that approval happens **before generation**, not after a final-text preview.
+Generation can take minutes; do not promise completion during a short presentation.
+Show progress or an already-downloaded approved exercise report if available.
+SMTP acceptance is not confirmed inbox delivery.
 
-"Real deployment would require validated surveillance data, authentication, durable
-delivery auditing, agreed authority routing and public-health governance. Today every
-zone uses one configured test inbox."
+The PDF/email are exercise-labelled. No stock moves, clinical orders, rideshare
+restrictions or separate briefing steps occur.
 
-## Questions
+## Lead time
 
-- **Does AI decide severity or quantities?** No. Statistical rules determine severity.
-  AI only writes an advisory assessment; this workflow never moves stock.
-- **What if Gemini or email fails?** The failure is visible. Definite failures can be
-  retried; ambiguous SMTP acceptance cannot be retried blindly.
-- **Can reset retract email?** No. It cancels stale generation before dispatch, not an
-  email already handed to SMTP.
-- **Does replay send again?** No. Action-log replay has external dispatch disabled.
+Step to **5 October**, index 34, when current risk reaches 80 in the default run:
+
+> In this seeded example, the alert arrived three days before the observed risk index
+> reached 80. That is lead relative to our score threshold, not a demonstrated
+> three-day lead before clinical diagnoses.
+
+The forecast horizon is two days, but a threshold-based alert lead can differ from
+two days; these are different measurements.
+
+## Close: evidence and limitations
+
+> In the recorded 200-seed benchmark, median alert lead was two days and alerts were
+> on or before the score crossing in all seeds. However, the clean-data benchmark
+> found one false critical zone-day in 165,600 scored zone-days. Our strict zero-false
+> critical requirement therefore remains failing.
+
+> This is a proof of concept. Real deployment needs validated surveillance feeds,
+> clinical/public-health calibration, authorised recipient routing, access controls,
+> durable delivery auditing and operational governance.
+
+Use [the recorded results](MATHS.md#8-measured-results), not older screenshots or
+former 42-ICB statistics. Reset ends the demo but cannot recall submitted email.
+
+## Short answers
+
+- **Does Gemini predict the outbreak?** No. Statistical rules produce the index,
+  forecast and status; Gemini writes the downstream report.
+- **Does Critical confirm a virus or an outbreak?** No. It flags review of a high
+  forecast plus a growing wastewater signal.
+- **Who receives it?** Only the configured address captured when that incident opened.
+  The named ICB is the intended authority, not proof of delivery to an official team.
+- **What if generation/email fails?** The error is visible. Definite failures permit
+  explicit retry; ambiguous SMTP submission does not.
+- **Can I change settings live?** No. Restart after configuration changes and beware
+  terminal overrides. See [configuration troubleshooting](../README.md#why-a-saved-setting-may-not-appear).
+- **Does replay email again?** No. Simulation action-log replay disables dispatch.
