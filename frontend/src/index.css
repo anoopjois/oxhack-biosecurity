@@ -217,7 +217,12 @@ button { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
 .brand h1 { flex: none; }
-.brand-logo { display: block; width: 148px; height: auto; border-radius: 4px; }
+.brand-logo { display: block; width: 148px; height: auto; }
+/* The wordmark's navy "Secure" needs a light plate to stay legible on dark surfaces. */
+:root[data-theme="dark"] .brand-logo { background: #fff; padding: 3px 6px; border-radius: 6px; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-logo { background: #fff; padding: 3px 6px; border-radius: 6px; }
+}
 .brand p { font-size: 0.75rem; color: var(--ink-2); white-space: nowrap; }
 .when { flex: 1; text-align: center; line-height: 1.15; min-width: 180px; }
 .when-date { display: block; font-size: 1.4rem; font-weight: 750; white-space: nowrap; }
