@@ -53,8 +53,3 @@ export const score = (x: number | null | undefined) => (x === null || x === unde
 
 /** Doubling time ln2 / r, in days. */
 export const doublingDays = (r: number) => Math.log(2) / r
-
-/** "Bath and North East Somerset, Swindon and Wiltshire" -> "Bath"; keeps short names whole. */
-export function shortName(name: string): string {
-  return name.split(/,| and /)[0].trim()
-}

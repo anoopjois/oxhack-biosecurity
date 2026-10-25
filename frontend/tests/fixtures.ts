@@ -1,4 +1,4 @@
-import type { AllocationPayload, Clock, SimEvent, Zone } from '../src/api/types'
+import type { Clock, SimEvent, Zone } from '../src/api/types'
 
 export const clock = (over: Partial<Clock> = {}): Clock => ({
   day: 31, sim_date: '2026-10-02', first_date: '2026-09-01', last_date: '2026-10-12', playing: false,
@@ -18,26 +18,3 @@ export const event = (type: string, payload: Record<string, unknown> = {}, over:
   event_id: nextId++, sim_date: '2026-10-02', created_at: '2026-10-24T12:00:00Z', type,
   severity: 'info', zip_code: 'greater-manchester', message: `${type} message`, payload, ...over,
 })
-
-export const allocation: AllocationPayload = {
-  episode_id: 1, target: 'greater-manchester',
-  approval: { required: true, timeout_s: 30 },
-  reserve_floor_days: 4.2,
-  transfers: [
-    { donor: 'cheshire-and-merseyside', donor_name: 'Cheshire and Merseyside', facility_id: 'x', distance_km: 37.2,
-      ppe_units: 24300, antiviral_doses: 6100, vaccine_doses: 12400,
-      donor_after: { ppe_units: 32400, antiviral_doses: 8100, vaccine_doses: 16200 },
-      reserve_days_before: 9.8, reserve_days_after: 5.8 },
-    { donor: 'west-yorkshire', donor_name: 'West Yorkshire', facility_id: 'y', distance_km: 48.4,
-      ppe_units: 16800, antiviral_doses: 4000, vaccine_doses: 9000,
-      donor_after: { ppe_units: 28800, antiviral_doses: 7200, vaccine_doses: 14400 },
-      reserve_days_before: 8.9, reserve_days_after: 6.1 },
-  ],
-  surge_target: { ppe_units: 116000, antiviral_doses: 29000, vaccine_doses: 58000 },
-  deficit: { ppe_units: 41100, antiviral_doses: 10100, vaccine_doses: 21400 },
-  transferred: { ppe_units: 41100, antiviral_doses: 10100, vaccine_doses: 21400 },
-  uncovered: { ppe_units: 0, antiviral_doses: 0, vaccine_doses: 0 },
-  coverage_pct: { ppe_units: 100, antiviral_doses: 100, vaccine_doses: 100 },
-  target_before: { ppe_units: 74900, antiviral_doses: 18900, vaccine_doses: 36600 },
-  target_after: { ppe_units: 116000, antiviral_doses: 29000, vaccine_doses: 58000 },
-}

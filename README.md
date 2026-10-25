@@ -205,8 +205,9 @@ start both servers manually first.
 - `backend/agent/executor.py`: incident creation and background report lifecycle.
 - `backend/agent/reporting.py`: Gemini structured output, ReportLab PDF and SMTP.
 - `frontend/`: React + TypeScript map, charts, incident summaries and notification approval.
-- The inventory API and pure allocation utilities remain for reference; incidents no
-  longer invoke them or mutate stock.
+- The inventory API and seeded inventory database remain for compatibility; incidents
+  do not mutate stock. Retired allocation utilities and transfer-map rendering have
+  been removed.
 
 See [the maths](docs/MATHS.md), [demo checklist](docs/DEMO_CHECKLIST.md) and
 [talk track](docs/DEMO_SCRIPT.md). [The original spec](docs/SPEC.md) and earlier phase
