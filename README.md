@@ -1,4 +1,4 @@
-# Biosecurity Autobalancer
+# BioSecure
 
 An early-warning system for disease outbreaks across England's 42 Integrated Care
 Boards (ICBs), built as a hackathon demo. It has two halves:

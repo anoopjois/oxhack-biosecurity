@@ -55,7 +55,7 @@ export function Header(p: Props) {
     <header className="header">
       <div className="brand">
         <span className="brand-dot" aria-hidden />
-        <h1>Biosecurity Autobalancer</h1>
+        <h1>BioSecure</h1>
         <span className="badge-simulated" data-testid="simulated-badge">SIMULATED DATA</span>
       </div>
 

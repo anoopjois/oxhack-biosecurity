@@ -40,7 +40,7 @@ def create_app(settings: config.Settings | None = None, directive_writer=DEFAULT
                 await task
         sim.close()
 
-    app = FastAPI(title="Biosecurity Autobalancer", lifespan=lifespan)
+    app = FastAPI(title="BioSecure", lifespan=lifespan)
 
     @app.exception_handler(SimulationError)
     async def simulation_error(_: Request, exc: SimulationError):
