@@ -183,7 +183,17 @@ class ReportService:
                 "".join(part.get("text", "") for part in candidate["content"]["parts"]
                         if not part.get("thought")))
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise ReportError(
+                    f"Gemini cannot serve model '{s.model}' (HTTP 404). The model may be retired "
+                    "or unavailable to your account, even if it appears in the models list. "
+                    "Set GEMINI_MODEL in .env to a supported model (for example gemini-3.8-flash), "
+                    "then restart the backend.") from None
             raise ReportError(f"Gemini request failed (HTTP {exc.response.status_code}).") from None
+        except httpx.TimeoutException:
+            raise ReportError(
+                f"Gemini request timed out after {s.timeout_s:g} seconds. "
+                "Retry, or increase REPORT_TIMEOUT_S in .env and restart the backend.") from None
         except httpx.RequestError:
             raise ReportError("Gemini could not be reached. Check the connection and retry.") from None
         except (KeyError, IndexError, TypeError, ValueError):

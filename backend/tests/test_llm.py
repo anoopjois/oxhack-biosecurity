@@ -23,7 +23,7 @@ def context(make_sim):
 
 
 def settings():
-    return DeliverySettings(api_key="secret-key", model="gemini-2.5-flash",
+    return DeliverySettings(api_key="secret-key", model="gemini-3.8-flash",
                             smtp_username="sender@example.com", smtp_password="app-password",
                             smtp_from="sender@example.com", recipient="test@example.com")
 
@@ -46,7 +46,7 @@ def test_gemini_structured_request_and_professional_pdf(context, monkeypatch):
     assert submitted == context and submitted["synthetic"]
     assert "secret-key" not in post.call_args.args[0]
     text = "\n".join(page.extract_text() for page in PdfReader(BytesIO(pdf)).pages)
-    assert "SIMULATED DATA" in text and "gemini-2.5-flash" in text
+    assert "SIMULATED DATA" in text and "gemini-3.8-flash" in text
 
 
 @pytest.mark.parametrize("result", [
@@ -61,10 +61,31 @@ def test_invalid_or_failed_gemini_never_becomes_success(context, monkeypatch, re
 
 
 def test_gemini_network_failure(context, monkeypatch):
-    monkeypatch.setattr(reporting.httpx, "post", MagicMock(side_effect=httpx.ConnectTimeout("secret-key")))
+    monkeypatch.setattr(reporting.httpx, "post", MagicMock(side_effect=httpx.ConnectError("secret-key")))
     with pytest.raises(ReportError, match="could not be reached") as error:
         ReportService(settings()).generate(context)
     assert "secret-key" not in str(error.value)
+
+@pytest.mark.parametrize("failure", [httpx.ConnectTimeout, httpx.ReadTimeout])
+def test_gemini_timeouts_explain_the_configured_limit(context, monkeypatch, failure):
+    monkeypatch.setattr(reporting.httpx, "post", MagicMock(side_effect=failure("secret-key")))
+    with pytest.raises(ReportError, match="timed out after 90 seconds") as error:
+        ReportService(replace(settings(), timeout_s=90)).generate(context)
+    assert "REPORT_TIMEOUT_S" in str(error.value)
+    assert "secret-key" not in str(error.value)
+
+def test_retired_model_404_explains_configuration_fix_without_leaking_provider_body(context, monkeypatch):
+    result = httpx.Response(
+        404, request=httpx.Request("POST", "https://example.com"),
+        json={"error": {"status": "NOT_FOUND", "message": "retired model; secret-key"}})
+    monkeypatch.setattr(reporting.httpx, "post", MagicMock(return_value=result))
+    service = ReportService(replace(settings(), model="gemini-2.5-flash"))
+    with pytest.raises(ReportError) as error:
+        service.generate(context)
+    message = str(error.value)
+    assert "HTTP 404" in message and "gemini-2.5-flash" in message
+    assert "GEMINI_MODEL" in message and "restart the backend" in message
+    assert "gemini-3.8-flash" in message and "secret-key" not in message
 
 
 def test_configuration_errors_are_actionable():

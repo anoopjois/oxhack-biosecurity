@@ -53,7 +53,8 @@ Edit your local `.env` before starting the backend. Never commit or paste creden
 
 ```dotenv
 GEMINI_API_KEY=your-google-ai-studio-api-key
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.8-flash
+REPORT_TIMEOUT_S=90
 ALERT_RECIPIENT=daeyad1@gmail.com
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -72,6 +73,12 @@ The recipient defaults to **daeyad1@gmail.com**, a test inbox, not an official a
 `ALERT_RECIPIENT` is one configured address for all zones; jurisdiction-based authority
 routing is not implemented. Change it only when an authorised recipient is agreed.
 Use a model available to your Gemini API key; `GEMINI_MODEL` is configurable.
+Gemini can list retired models in metadata while rejecting generation for new users.
+If generation returns HTTP 404, use a currently supported model and restart the backend;
+`gemini-3.8-flash` replaces the older `gemini-2.5-flash` default.
+Report generation may take tens of seconds; the default request timeout is 90 seconds.
+Increase `REPORT_TIMEOUT_S` and restart if generation repeatedly times out. Reports
+run in the background, so waiting does not block the simulation clock.
 
 Missing credentials do not prevent the dashboard running. Approved report jobs then
 fail visibly with a configuration message; they never pretend an email was sent.
