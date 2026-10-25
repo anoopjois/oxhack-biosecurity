@@ -4,8 +4,7 @@ This is the specification of the **implemented viral-outbreak early-warning and
 approved-reporting system**. It replaces the original logistics/autobalancer pitch.
 The original proposal remains in Git history, not as the current product contract.
 
-See [setup and stack](../README.md), [maths](MATHS.md), [demo checklist](DEMO_CHECKLIST.md)
-and [presentation script](DEMO_SCRIPT.md).
+See [setup and stack](../README.md) and [maths and validation](MATHS.md).
 
 ## Purpose and boundaries
 
@@ -17,6 +16,48 @@ All telemetry is synthetic. There is no live NHS, wastewater-laboratory, mobile-
 or hospital-system integration. An alert is a statistical early warning, not a
 confirmed outbreak, pathogen identification, infection probability or clinical order.
 The application does not automatically notify authorities or execute containment.
+
+## Problem and intended users
+
+### The problem being explored
+
+Regional preparedness requires more than a high reading: teams need to know what
+changed, how unusual it is, whether it is still rising and who should verify it.
+Signals may describe different populations, arrive at different times or reflect
+non-infectious causes. A&E waits, in particular, are not a pathogen-specific signal.
+Combining feeds without those qualifications can create confidence rather than insight.
+
+BioSecure explores a shorter **signal-to-review-to-handoff** workflow:
+
+1. Compare daily observations with the area's recent baseline.
+2. Show a transparent current index and a short-horizon projection.
+3. Surface a critical incident with the supporting measurements.
+4. Let a person dismiss it or approve a concise PDF assessment and email handoff.
+
+The intended outcome is earlier, better-informed preparedness review, not automated
+outbreak confirmation. The measured lead in this repository is relative to a synthetic
+index crossing, not a demonstrated advantage over clinical surveillance.
+
+### Intended users and potential clients
+
+| Audience | Proposed use | Decision boundary |
+|---|---|---|
+| ICB population-health analysts | Review area-level trends, anomalies and supporting evidence | Verify data and interpretation before escalation |
+| ICB emergency-preparedness and NHS operational leads | Coordinate a preparedness review and provider readiness discussions | Retain responsibility for escalation and operational decisions |
+| NHS provider planning teams | Use a verified regional warning to review capacity and readiness | Do not treat the index as a demand forecast |
+| UKHSA Health Protection Teams and local authority public health | Participate in appropriate signal verification and outbreak assessment | Follow established public-health responsibilities and reporting channels |
+
+An ICB or regional NHS analytics team is a plausible pilot client. These are intended
+audiences, not existing deployments, commercial agreements or organisational endorsements.
+The current application sends only to its configured inbox, not to all these groups.
+
+### What a pilot would need to demonstrate
+
+Assess the workflow with intended users before claiming benefit. Agree the surveillance
+outcome and comparator first, then measure detection timeliness, false-alert burden,
+missed events, operator review time and usefulness of the proposed actions. Include
+report factuality, recipient correctness and delivery auditability. Synthetic index
+lead time alone is not a sufficient success measure.
 
 ## Architecture
 
@@ -260,3 +301,68 @@ clock and reset the shared database; horizontal scaling is not implemented.
 There is no authentication or authorisation boundary on "operator" actions.
 Public exposure, live data ingestion or real-authority alerts require a separate
 production design, validated models/data, governance, access controls and delivery auditing.
+
+## Proposed scaling path (not implemented)
+
+Scaling means both handling more data and operating safely across more organisations.
+Adding web workers to this prototype is not a safe scaling strategy: simulation state
+is process-local and startup deliberately resets demo records.
+
+### 1. Establish a governed data pilot
+
+- Agree a specific use case, accountable clinical/public-health owners and an escalation
+  protocol with a participating organisation.
+- Obtain authorised feeds and document their purpose, licensing, retention and access
+  requirements. Prefer aggregate data where sufficient; assess disclosure risk rather
+  than assuming aggregation removes it.
+- Define ingestion contracts for units, timestamps, reporting delays, revisions,
+  missingness and geographic coverage. Wastewater catchments and hospital populations
+  will not necessarily align with ICB boundaries; geographic mapping needs validation.
+- Validate against agreed outcomes across areas, seasons and pathogens. Reassess the
+  synthetic weights, lag assumptions and thresholds rather than treating them as
+  transferable clinical parameters. Resolve the current false-critical requirement
+  failure before claiming that requirement is met.
+
+### 2. Separate ingestion, scoring, API and delivery
+
+- Replace demo startup/reset semantics with durable migrations and retained observations,
+  assessments and audit records. A managed relational database such as PostgreSQL is a
+  candidate when concurrent workloads outgrow SQLite; choose it from measured needs.
+- Run ingestion and scheduled scoring independently of stateless API replicas. Partition
+  work by area and assessment date, with a single owner or coordinated job claim per
+  assessment to prevent duplicate decisions.
+- Preserve as-of data versions and engine/configuration versions so revised feeds do
+  not silently rewrite previously issued assessments.
+- Move reports to durable queued workers, persist retry state and use a transactional
+  outbox between approved decisions and dispatch jobs. Add deduplication and delivery
+  reconciliation; do not promise exactly-once SMTP delivery.
+- Store PDFs in access-controlled object storage with a defined retention policy rather
+  than growing the operational database indefinitely.
+
+### 3. Make organisation boundaries and review explicit
+
+- Add authenticated identities, organisation-scoped access, role-based approval and
+  auditable decisions before exposing the service beyond a local pilot.
+- Replace the single recipient setting with a maintained, verified routing directory
+  and an agreed escalation policy. Keep exercise delivery distinct from live channels.
+- Provide a final-text review step if required by governance; today's approval occurs
+  before AI text exists. Validate generated advice against evidence and retain a
+  non-generative reporting path when a provider is unavailable.
+- Review what data may leave the organisation for Gemini processing, with suitable
+  contractual, privacy and security controls. The AI must remain separate from scoring
+  and cannot become an unreviewed source of clinical decisions.
+
+### 4. Scale from observed bottlenecks
+
+Daily area-level scoring and occasional reports have different resource needs.
+Measure ingestion freshness, scoring time, API latency, queue age, generation failures,
+delivery uncertainty and operator alert burden before choosing capacity targets.
+Batch database reads and assess incremental rolling calculations against the existing
+replay implementation for equivalence. Scale report workers separately, with bounded
+concurrency, provider quotas and cost limits, so slow AI calls do not delay scoring.
+
+Expand to additional geographies only after validating their mappings and baselines.
+Additional pathogens need explicit signal definitions and separate validation; a larger
+roster or a different model name does not by itself make the detector generalisable.
+These are proposed engineering and governance steps, not current platform capabilities
+or a delivery commitment.

@@ -30,14 +30,31 @@ It does **not** automatically email authorities, diagnose infections, order clin
 interventions, move stock or control rideshare services. Actual delivery uses one
 configured address for every area, not a directory of official ICB contacts.
 
+### Problem, audience and value
+
+The problem BioSecure explores is the gap between spotting an unusual population-level
+signal and turning it into a clear, reviewable preparedness decision. Wastewater,
+service pressure and population mixing describe different parts of that picture;
+none alone confirms an outbreak.
+
+The intended users are **ICB population-health and emergency-preparedness teams**,
+with NHS provider operational teams and UKHSA/local public-health partners involved
+in verification and response. An ICB or regional NHS analytics team is a potential
+pilot client, not an existing customer or an implied endorsement.
+
+The proposed value is one regional view of changing signals, an explainable
+short-horizon warning and a concise evidence-backed handoff to the responsible team.
+The current prototype demonstrates that workflow with synthetic data; it does not
+yet establish operational benefit, clinical accuracy or cost savings.
+See the [problem and intended users](docs/SPEC.md#problem-and-intended-users)
+and [proposed scaling path](docs/SPEC.md#proposed-scaling-path-not-implemented).
+
 ## Documentation
 
 | Guide | Contents |
 |---|---|
-| [System design and API](docs/SPEC.md) | Architecture, data flow, state, reporting lifecycle, endpoints and coverage |
+| [System design and API](docs/SPEC.md) | Problem, intended users, architecture, reporting, endpoints and proposed scaling path |
 | [Maths and validation](docs/MATHS.md) | Generator, preprocessing, score, forecast, alert rules, measured results and limitations |
-| [Demo checklist](docs/DEMO_CHECKLIST.md) | Safe setup, presentation checks and browser verification |
-| [Demo script](docs/DEMO_SCRIPT.md) | A short, evidence-grounded presentation walkthrough |
 
 ## Tech stack
 
@@ -305,7 +322,7 @@ do not commit generated reports, runtime databases or credentials.
 - [backend/](backend/): API, simulation clock, SQLite, incidents and report delivery.
 - [frontend/](frontend/): dashboard, map, charts, controls and approval UI.
 - [scripts/](scripts/): optional plots, growth-rate analysis, map generation and report smoke check.
-- [docs/](docs/): current design, maths and presentation guidance. Older screenshots
+- [docs/](docs/): current design, maths, validation and proposed production direction. Older screenshots
   in [docs/figures/](docs/figures/) may depict retired UI; they are not the feature specification.
 
 The inventory API and seeded inventory tables remain for compatibility, but the
