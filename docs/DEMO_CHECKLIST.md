@@ -1,9 +1,7 @@
 # Demo walkthrough checklist
 
-**Setup**
-- Run `./dev.sh`. On a fresh clone, use `PYTHON=python3.13 ./dev.sh`.
-- Open http://localhost:5173 full-screen (F11) on the projector.
-- The layout fits with nothing clipped at 1280×720, 1440×900 and 1920×1080, in Chrome and Safari.
+Use this before presenting. The talk track itself is in [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md),
+and the numbers behind it are in [`MATHS.md`](MATHS.md).
 
 **Keyboard shortcuts:** <kbd>Space</kbd> play/pause · <kbd>→</kbd> step ·
 <kbd>R</kbd> reset (asks first) · <kbd>S</kbd> spike · <kbd>?</kbd> help & settings.
@@ -11,14 +9,62 @@ They never fire while a form field has focus.
 
 Screenshots of each state are in `docs/figures/ui-*.png`.
 
-## The one-click demo
-1. ☐ On first load a card reads "Watch an outbreak unfold". Click **★ Run demo** (on the
-   card or in the header). It resets, injects a hidden spike in Greater Manchester at
-   r = 0.4, and plays at 1 s per simulated day.
-2. ☐ After about 4 s (Fri 2 Oct, Day 31 of 41), Greater Manchester's ring turns **red and
-   pulses**. The map flies in, and blue arcs draw from 3 nearby areas, each labelled with
-   the distance and quantities sent.
-3. ☐ Press <kbd>Space</kbd> to pause, then talk through the screen.
+## Before the show (10 minutes out)
+1. ☐ **Start it.** Run `./dev.sh`. It prints the backend and frontend URLs.
+   - On a fresh machine, the first run also creates `.venv` and installs npm packages.
+     Allow a few minutes, and do it before the session, not on venue wifi.
+   - If `python3` is older than 3.10, use `PYTHON=python3.13 ./dev.sh`.
+   - If port 8000 or 5173 is taken, set `BACKEND_PORT` / `FRONTEND_PORT` in `.env`.
+2. ☐ **AI briefing or not?**
+   - With `ANTHROPIC_API_KEY` in `.env`, briefings switch to **"AI briefing (Claude)"** a
+     few seconds after the alert. Check the key first with
+     `.venv/bin/python scripts/llm_smoke.py`.
+   - Without a key (or with flaky wifi), the **"Rule-based briefing"** stays. The demo is
+     identical otherwise. If unsure, leave the key out.
+3. ☐ **Open the page.** Open http://localhost:5173 full-screen (F11) on the projector.
+   The layout fits with nothing clipped at 1280×720, 1440×900 and 1920×1080, in Chrome
+   and Safari.
+4. ☐ **Dry run.** Do one dry run of the one-click demo below. Then press <kbd>R</kbd>
+   and confirm, so the audience first sees Day 27 with the coach card.
+   - To see the coach card again after dismissing it, reload the page.
+5. ☐ **Clean up the screen.** Close other tabs, mute notifications, and set display
+   sleep to "never".
+
+## The one-click demo (synced to the talk track)
+With the default seed (42), the run is the same every time:
+
+| Time after click | Day | What you should see |
+|---|---|---|
+| 0 s | 27 · Mon 28 Sep | The incident card appears, marked **WATCHING**, with a greyed step: "Simulated spike · hidden from the system". |
+| ~3 s | 30 · Thu 1 Oct | Greater Manchester's ring turns amber. |
+| **~4 s** | **31 · Fri 2 Oct** | **Red** and pulsing; the camera flies in; 3 arcs. **Press <kbd>Space</kbd>.** |
+| (step) | 33 · Sun 4 Oct | Risk now is 87; the lead caption says **2 days**. |
+| ~14 s | 41 · Mon 12 Oct | Timeline ends. |
+
+1. ☐ On first load, a card reads "Watch an outbreak unfold". Click **★ Run demo** (on
+   the card or in the header). It resets, injects a hidden spike in Greater Manchester
+   at r = 0.4, and plays at 1 s per simulated day.
+2. ☐ **Timeline bar** (bottom): "Recorded history" is shaded up to the "Today" cursor,
+   and a **Spike** diamond sits at 28 Sep.
+3. ☐ **At Day 31 (Fri 2 Oct)**, press <kbd>Space</kbd>. You should see:
+   - Greater Manchester's ring red and pulsing; the legend reads Critical 1;
+   - blue arcs from **Cheshire and Merseyside (37 km)**, **West Yorkshire (48 km)** and
+     **Lancashire and South Cumbria (57 km)**, each labelled with the quantities sent;
+   - the zone card: Risk now **62**, Risk in 48h **83** (red), Doubling **2.1** days,
+     A&E wait 69 min (usual 64);
+   - an **Alert raised** marker on the timeline.
+4. ☐ **The incident card reads, top to bottom:**
+   - Detected · 2 Oct · forecast 83, virus doubling every 2.1 days;
+   - Stock moved · PPE 54k → 116k, Antivirals 17k → 29k, Vaccines 24k → 52k;
+   - Briefing · "Rule-based briefing" (or "AI briefing (Claude)");
+   - Containment · Pooled rideshare paused within 25 km until 9 Oct.
+5. ☐ **The arcs fade after 20 s.** Click **Show on map** in the "Stock moved" step to
+   draw them again.
+6. ☐ Press <kbd>→</kbd> twice (Day 33, Sun 4 Oct). You should see:
+   - the caption "⚡ Alert raised **2 days** before the risk score reached 80";
+   - a shaded lead band on the chart;
+   - **Would have hit 80** on the timeline.
+7. ☐ Press <kbd>Space</kbd> to play to the end, or stop there.
 
 ## Full walkthrough
 1. ☐ **Header:**

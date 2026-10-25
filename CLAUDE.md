@@ -34,7 +34,7 @@ this file wins.** The overrides are listed at the bottom.
 | `backend/` | Python 3, FastAPI, SQLite, numpy, pandas, pytest. It imports `engine/` directly and owns the simulation clock, the DB, the agent and the API. |
 | `frontend/` | React, Vite and TypeScript, with react-leaflet (OpenStreetMap tiles) and recharts. |
 | `./dev.sh` | One command that starts everything locally. |
-| `scripts/` | Dev-only tools, such as `plot_outbreak.py` (matplotlib, from `requirements-dev.txt`). The demo never needs them. |
+| `scripts/` | Dev-only tools, such as `plot_outbreak.py` (matplotlib, from `requirements-dev.txt`) and `lead_vs_r.py` (lead time across growth rates). The demo never needs them. |
 
 ## Zones
 
@@ -365,6 +365,16 @@ Code lives in `backend/agent/`: `allocation.py` (pure maths), `executor.py`,
   1920×1080), with screenshots written to `$SHOTS`.
 - `docs/DEMO_CHECKLIST.md`.
 - Key screenshots are in `docs/figures/ui-*.png`.
+
+## Docs (Phase 5)
+- `README.md`: overview, quickstart, Mermaid architecture, how to run each test layer.
+- `docs/MATHS.md`: judge-facing maths, measured results (each with the test that produced
+  it) and limitations. Keep its numbers in sync with `test_required.py` output and
+  `scripts/lead_vs_r.py`.
+- `docs/DEMO_SCRIPT.md`: the 3-minute talk track synced to Run demo, and judge Q&A.
+- `docs/DEMO_CHECKLIST.md`: pre-show setup and click-by-click checks.
+- Playwright reads `FRONTEND_PORT` (like Vite and `dev.sh`), so a second checkout on other
+  ports never reuses another checkout's server.
 
 ## Overrides of docs/SPEC.md
 
